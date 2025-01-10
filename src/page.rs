@@ -165,6 +165,19 @@ pub async fn set_content(pool: Pool<MySql>, id: i32, content: Option<&str>) -> R
     Ok(())
 }
 
+#[tracing::instrument(skip(pool))]
+#[must_use]
+pub async fn set_content_size(pool: Pool<MySql>, id: i32, content_size: i32) -> Result<(), BoxError> {
+    query("UPDATE page SET content_size = ? WHERE id = ?")
+        .bind(content_size)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(())
+}
+
 #[tracing::instrument(skip(pool, schema))]
 #[must_use]
 pub async fn set_schema(pool: Pool<MySql>, id: i32, schema: Option<&str>) -> Result<(), BoxError> {

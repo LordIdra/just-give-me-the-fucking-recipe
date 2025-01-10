@@ -66,6 +66,7 @@ async fn download_impl(pool: Pool<MySql>, client: Client, page: Page) -> Result<
         .map_err(|err| Box::new(err) as BoxError)?;
 
     page::set_content(pool.clone(), page.id, Some(&content)).await?;
+    page::set_content_size(pool.clone(), page.id, content.len() as i32).await?;
     page::set_status(pool, page.id, PageStatus::WaitingForExtraction).await?;
 
     info!("Downloaded {} ({} characters)", page.link, content.len());

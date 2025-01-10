@@ -18,6 +18,7 @@ mod gpt;
 mod link_blacklist;
 mod page;
 mod recipe;
+mod statistic;
 mod word;
 
 type BoxError = Box<dyn Error + Send>;
@@ -99,6 +100,7 @@ async fn main() {
     tokio::spawn(extractor::run(pool.clone()));
     tokio::spawn(parser::run(pool.clone()));
     tokio::spawn(follower::run(pool.clone()));
+    tokio::spawn(statistic::run(pool.clone()));
 
     let state = AppState {
         pool,

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS page (
     word_source     INT,
     follower_source INT,
     content         MEDIUMTEXT,
+    content_size    INT,
     schema          MEDIUMTEXT,
     priority        INT NOT NULL,
     status          ENUM (
@@ -129,5 +130,76 @@ CREATE TABLE IF NOT EXISTS recipe_instruction (
     PRIMARY KEY (recipe, instruction),
     FOREIGN KEY (recipe) REFERENCES recipe(id),
     FOREIGN KEY (instruction) REFERENCES instruction(id)
+);
+
+CREATE TABLE IF NOT EXISTS word_statistic (
+    timestamp                  INT NOT NULL,
+    waiting_for_generation     INT NOT NULL,
+    generating                 INT NOT NULL,
+    generation_failed          INT NOT NULL,
+    generation_complete        INT NOT NULL,
+    waiting_for_classification INT NOT NULL,
+    classifying                INT NOT NULL,
+    classification_failed      INT NOT NULL,
+    classified_as_invalid      INT NOT NULL,
+    waiting_for_search         INT NOT NULL,
+    searching                  INT NOT NULL,
+    search_failed              INT NOT NULL,
+    search_complete            INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS page_statistic (
+    timestamp                 INT NOT NULL,
+    waiting_for_download      INT NOT NULL,
+    downloading               INT NOT NULL,
+    download_failed           INT NOT NULL,
+    waiting_for_extraction    INT NOT NULL,
+    extracting                INT NOT NULL,
+    extraction_failed         INT NOT NULL,
+    waiting_for_parsing       INT NOT NULL,
+    parsing                   INT NOT NULL,
+    parsing_incomplete_recipe INT NOT NULL,
+    waiting_for_following     INT NOT NULL,
+    following                 INT NOT NULL,
+    following_complete        INT NOT NULL,
+    following_failed          INT NOT NULL,
+    total_content_size        INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recipe_component_statistic (
+    timestamp         INT NOT NULL,
+    recipe_count      INT NOT NULL,
+    keyword_count     INT NOT NULL,
+    author_count      INT NOT NULL,
+    image_count       INT NOT NULL,
+    ingredient_count  INT NOT NULL,
+    instruction_count INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recipe_statistic (
+    timestamp               INT NOT NULL,
+    with_keywords           INT NOT NULL,
+    with_authors            INT NOT NULL,
+    with_images             INT NOT NULL,
+    with_ingredients        INT NOT NULL,
+    with_instructions       INT NOT NULL,
+    with_title              INT NOT NULL,
+    with_description        INT NOT NULL,
+    with_date               INT NOT NULL,
+    with_rating             INT NOT NULL,
+    with_rating_count       INT NOT NULL,
+    with_prep_time_seconds  INT NOT NULL,
+    with_cook_time_seconds  INT NOT NULL,
+    with_total_time_seconds INT NOT NULL,
+    with_servings           INT NOT NULL,
+    with_calories           INT NOT NULL,
+    with_carbohydrates      INT NOT NULL,
+    with_cholesterol        INT NOT NULL,
+    with_fat                INT NOT NULL,
+    with_fiber              INT NOT NULL,
+    with_protein            INT NOT NULL,
+    with_saturated_fat      INT NOT NULL,
+    with_sodium             INT NOT NULL,
+    with_sugar              INT NOT NULL
 );
 
