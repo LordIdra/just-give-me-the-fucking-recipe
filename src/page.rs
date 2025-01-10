@@ -239,7 +239,7 @@ async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSt
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let result = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? ORDER BY priority DESC GROUP BY domain LIMIT {limit}"))
+    let result = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? GROUP BY domain ORDER BY priority DESC LIMIT {limit}"))
         .bind(status_from.to_string())
         .bind(limit as i32)
         .fetch_all(&pool)
