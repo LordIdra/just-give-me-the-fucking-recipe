@@ -7,9 +7,9 @@ use tokio::time::interval;
 use crate::{page::PageStatus, word::WordStatus, BoxError};
 
 #[derive(FromRow)]
-struct OneBigInt(u64);
+struct OneBigInt(i64);
 
-async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<u64, BoxError> {
+async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, BoxError> {
     dbg!(1);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM word WHERE status = ?")
         .bind(word.to_string())
@@ -19,7 +19,7 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<u64, B
         .0)
 }
 
-async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<u64, BoxError> {
+async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i64, BoxError> {
     dbg!(2);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM page WHERE status = ?")
         .bind(word.to_string())
@@ -29,7 +29,7 @@ async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<u64, B
         .0)
 }
 
-async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<u64, BoxError> {
+async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
     dbg!(3);
     Ok(query_as::<_, OneBigInt>("SELECT CAST(SUM(content_size) AS UNSIGNED INT) FROM page")
         .fetch_one(&pool)
@@ -38,7 +38,7 @@ async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<u64, BoxError> {
         .0)
 }
 
-async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<u64, BoxError> {
+async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
     dbg!(4);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM ?")
         .bind(table.to_string())
@@ -48,7 +48,7 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<u64, BoxError> {
         .0)
 }
 
-async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<u64, BoxError> {
+async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
     dbg!(5);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(DISTINCT recipe.id) FROM recipe JOIN ? ON recipe.id = ?.recipe")
         .bind(table.to_string())
@@ -58,7 +58,7 @@ async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Res
         .0)
 }
 
-async fn fetch_recipes_with_column(pool: Pool<MySql>, table: &str) -> Result<u64, BoxError> {
+async fn fetch_recipes_with_column(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
     dbg!(6);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM recipe WHERE ? IS NOT NULL")
         .bind(table.to_string())
