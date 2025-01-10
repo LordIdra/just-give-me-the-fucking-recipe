@@ -78,7 +78,6 @@ CREATE TABLE IF NOT EXISTS recipe_keyword (
 CREATE TABLE IF NOT EXISTS author (
     id   INT NOT NULL AUTO_INCREMENT,
     name TEXT NOT NULL,
-    link TEXT NOT NULL,
     PRIMARY KEY (id)
 );
 
