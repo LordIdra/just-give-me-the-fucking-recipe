@@ -64,7 +64,6 @@ async fn fetch_recipes_with_column(pool: Pool<MySql>, column: &str) -> Result<i6
 async fn update(pool: Pool<MySql>) -> Result<(), BoxError> {
     let timestamp = chrono::offset::Utc::now();
 
-    dbg!(1);
     query("INSERT INTO word_statistic (
 timestamp, waiting_for_generation, generating, generation_failed, generation_complete, waiting_for_classification,
 classifying, classification_failed, classified_as_invalid, waiting_for_search, searching, search_failed, search_complete
@@ -86,7 +85,6 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    dbg!(2);
     query("INSERT INTO page_statistic (
 timestamp, waiting_for_download, downloading, download_failed, waiting_for_extraction, extracting, extraction_failed,
 waiting_for_parsing, parsing, parsing_incomplete_recipe, waiting_for_following, following, following_complete, following_failed,
@@ -111,7 +109,6 @@ total_content_size
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    dbg!(3);
     query("INSERT INTO recipe_component_statistic (
 timestamp, recipe_count, keyword_count, author_count, image_count, ingredient_count, instruction_count
 ) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -126,7 +123,6 @@ timestamp, recipe_count, keyword_count, author_count, image_count, ingredient_co
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    dbg!(4);
     query("INSERT INTO recipe_statistic (
 timestamp, with_keywords, with_authors, with_images, with_ingredients, with_instructions, with_title, with_description, with_date,
 with_rating, with_rating_count, with_prep_time_seconds, with_cook_time_seconds, with_total_time_seconds, with_servings, 
