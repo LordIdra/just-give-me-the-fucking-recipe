@@ -245,17 +245,24 @@ async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSt
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let statement = "UPDATE page SET status = ? WHERE id IN (".to_string() + &"?, ".repeat(limit - 1) + "?)";
-    let mut q = query(&statement)
-        .bind(status_to.to_string());
+    if !result.is_empty() {
+        let mut statement = "UPDATE page SET status = ? WHERE id IN (".to_string();
+        for (i, page) in result.iter().enumerate() {
+            if i != 0 {
+                statement += ", ";
+            }
+            statement += &page.id.to_string();
+        }
+        statement += ")";
 
-    for page in &result {
-        q = q.bind(page.id);
+            let q = query(&statement)
+                .bind(status_to.to_string());
+
+
+        q.execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
     }
-    
-    q.execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
 
     tx.commit()
         .await
