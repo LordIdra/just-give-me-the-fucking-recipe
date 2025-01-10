@@ -5,8 +5,6 @@ use tokio::sync::Semaphore;
 
 use crate::{BoxError, UnexpectedStatusCodeErr};
 
-const API_KEY: &str = "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";
-
 static GPT_SEMAPHORE: Semaphore = Semaphore::const_new(3);
 
 #[derive(Debug, Deserialize)]
@@ -39,7 +37,7 @@ pub async fn query_gpt<T: for<'a> Deserialize<'a>>(client: &Client, response_for
 
     let response = client
         .post("https://api.openai.com/v1/chat/completions")
-        .header("Authorization", format!("Bearer {}", API_KEY))
+        .header("Authorization", format!("Bearer {}", api_key))
         .json(&request_body)
         .send()
         .await
