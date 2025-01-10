@@ -1,10 +1,12 @@
+use std::fs::File;
+use std::io::Read;
 use std::{error::Error, fmt};
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
 use log::{info, warn};
 use page::{downloader, extractor, follower, parser};
-use reqwest::StatusCode;
+use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
@@ -47,6 +49,8 @@ struct Args {
     #[arg(long)]
     proxy: String,
     #[arg(long)]
+    crt_file: String,
+    #[arg(long)]
     database_url: String,
 }
 
@@ -70,6 +74,14 @@ async fn main() {
     info!("Starting...");
 
     let args = Args::parse();
+
+    let mut buf = vec![];
+    File::open(args.crt_file)
+        .unwrap()
+        .read_to_end(&mut buf)
+        .unwrap();
+
+    let certificates = Certificate::from_pem_bundle(&buf).unwrap();
     
     let pool = MySqlPoolOptions::new()
         .max_connections(8)
@@ -83,7 +95,7 @@ async fn main() {
     tokio::spawn(classifier::run(pool.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(pool.clone(), args.openai_key));
     tokio::spawn(searcher::run(pool.clone(), args.serper_key));
-    tokio::spawn(downloader::run(pool.clone(), args.proxy));
+    tokio::spawn(downloader::run(pool.clone(), args.proxy, certificates));
     tokio::spawn(extractor::run(pool.clone()));
     tokio::spawn(parser::run(pool.clone()));
     tokio::spawn(follower::run(pool.clone()));
