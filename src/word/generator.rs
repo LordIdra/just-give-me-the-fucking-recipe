@@ -1,16 +1,17 @@
-use std::time::{Duration, Instant};
+use std::{sync::Arc, time::Duration};
 
-use log::info;
+use log::{info, warn};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use tokio_rusqlite::Connection;
+use sqlx::{MySql, Pool};
+use tokio::{sync::Semaphore, time::interval};
 
-use crate::{gpt, word::{self, WordStatus}};
+use crate::{gpt, word::{self, WordStatus}, BoxError};
 
 use super::Word;
 
-const POLL_INTERVAL_MILLIS: u128 = 100;
+const MIN_WAITING_FOR_SEARCH: i32 = 10;
 
 fn response_format() -> serde_json::Value {
     json!({
@@ -42,44 +43,74 @@ struct Output {
     output: Vec<String>,
 }
 
-async fn generate(connection: Connection, job: Word) {
-    let client = Client::new();
+#[tracing::instrument(skip(pool, client))]
+async fn generate(pool: Pool<MySql>, client: Client, job: Word) -> Result<(), BoxError> {
     let input = format!("List as many foods as you possibly can in the food category: {:?}. Just output the name of each food without extra detail.", job.word);
-    let response = gpt::query_gpt::<Output>(&client, response_format(), input).await;
 
-    let Some(response) = response else {
-        info!("Failed to generate on category '{}'; status reset to WAITING_FOR_GENERATION", &job.word);
-        word::set_status(connection.clone(), job.id, WordStatus::WaitingForGeneration).await;
-        return;
-    };
-
-    info!("Generated from {}: {:?}", job.word, response.output);
+    let response = gpt::query_gpt::<Output>(&client, response_format(), input).await?;
     for output in response.output {
-        if word::add(connection.clone(), &output, Some(job.id), -1, WordStatus::WaitingForClassification).await {
+        if word::add(pool.clone(), &output, Some(job.id), -1, WordStatus::WaitingForClassification).await? {
             info!("Added generated word {}", output)
         } else {
             info!("Rejected duplicate generated word {}", output)
         }
     }
+
+    word::set_status(pool.clone(), job.id, WordStatus::GenerationComplete).await?;
+
+    Ok(())
 }
 
-pub async fn start(connection: Connection) {
-    info!("Started generation task");
+pub async fn run(pool: Pool<MySql>) {
+    info!("Started generator");
+
+    let client = Client::new();
+
+    let semaphore = Arc::new(Semaphore::new(16));
+
+    let mut interval = interval(Duration::from_millis(500));
 
     loop {
-        let start = Instant::now();
+        interval.tick().await;
 
-        while let Some(job) = word::next_job(connection.clone(), WordStatus::WaitingForGeneration, WordStatus::Generating).await {
-            let connection = connection.clone();
-            tokio::spawn(async move {
-                generate(connection, job).await;
-            });
+        let current_waiting_for_search = word::words_with_status(pool.clone(), WordStatus::WaitingForSearch).await;
+        if let Err(err) = current_waiting_for_search {
+            warn!("Error while getting words with status WAITING_FOR_SEARCH: {} (source: {:?})", err, err.source());
+            continue;
         }
 
-        let elapsed = (start - Instant::now()).as_millis();
-        if elapsed < POLL_INTERVAL_MILLIS {
-            let sleep_duration = Duration::from_millis((POLL_INTERVAL_MILLIS - elapsed) as u64);
-            tokio::time::sleep(sleep_duration).await;
+        if current_waiting_for_search.unwrap() >= MIN_WAITING_FOR_SEARCH {
+            continue;
+        }
+
+        loop {
+            if semaphore.available_permits() == 0 {
+                break
+            }
+
+            let next_job = word::next_job(pool.clone(), WordStatus::WaitingForGeneration, WordStatus::Generating).await;
+            if let Err(err) = next_job {
+                warn!("Error while getting next job: {}", err);
+                break;
+            }
+
+            let Some(state) = next_job.unwrap() else {
+                break;
+            };
+            
+            let sempahore = semaphore.clone();
+            let client = client.clone();
+            let pool = pool.clone();
+
+            tokio::spawn(async move {
+                let _permit = sempahore.acquire().await.unwrap();
+                if let Err(err) = generate(pool.clone(), client, state.clone()).await {
+                    warn!("Generator encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
+                    if let Err(err) = word::set_status(pool, state.id, WordStatus::GenerationFailed).await {
+                        warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());
+                    }
+                }
+            });
         }
     }
 }

@@ -1,16 +1,36 @@
+use std::{error::Error, fmt};
+
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
-//use link::searcher;
-use log::info;
+use log::{info, warn};
+use page::{downloader, extractor, follower, parser};
 use reqwest::StatusCode;
 use serde::Deserialize;
+use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
-use tokio_rusqlite::Connection;
-use word::{classifier, generator, WordStatus};
+use tracing_subscriber::Layer;
+#[cfg(feature = "profiling")]
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use word::{classifier, generator, searcher, WordStatus};
 
 mod gpt;
-//mod link;
+mod link_blacklist;
+mod page;
+mod recipe;
 mod word;
+
+type BoxError = Box<dyn Error + Send>;
+
+#[derive(Debug)]
+pub struct UnexpectedStatusCodeErr(StatusCode);
+
+impl fmt::Display for UnexpectedStatusCodeErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Unexpected status code '{}'", self.0)
+    }
+}
+
+impl Error for UnexpectedStatusCodeErr {}
 
 #[derive(Debug, Deserialize)]
 struct SubmitKeyword {
@@ -25,44 +45,43 @@ struct Args {
 
 #[derive(Debug, Clone)]
 struct AppState {
-    connection: Connection,
+    pool: Pool<MySql>,
 }
 
 #[tokio::main]
 async fn main() {
+    #[cfg(not(feature = "profiling"))]
     tracing_subscriber::fmt::init();
+    #[cfg(feature = "profiling")]
+    tracing_subscriber::registry()
+        .with(tracing_tracy::TracyLayer::default())
+        .with(tracing_subscriber::fmt::layer()
+            .with_line_number(true)
+            .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")))
+        .init();
     info!("Starting...");
 
     let args = Args::parse();
+    
+    let pool = MySqlPoolOptions::new()
+        .max_connections(8)
+        .connect("mysql://root:jibbletastic@localhost/recipe")
+        .await
+        .expect("Failed to connect to database");
 
-    let connection = Connection::open("database.db").await.unwrap();
+    word::reset_tasks(pool.clone()).await.expect("Failed to reset word tasks");
+    page::reset_tasks(pool.clone()).await.expect("Failed to reset page tasks");
 
-    word::reset_tasks(connection.clone()).await;
-    //link::reset_tasks(connection.clone()).await;
-
-    {
-        let connection = connection.clone();
-        tokio::spawn(async move {
-            classifier::start(connection).await;
-        });
-    }
-
-    {
-        let connection = connection.clone();
-        tokio::spawn(async move {
-            generator::start(connection).await;
-        });
-    }
-
-    //{
-    //    let connection = connection.clone();
-    //    tokio::spawn(async move {
-    //        searcher::start(connection).await;
-    //    });
-    //}
+    tokio::spawn(classifier::run(pool.clone()));
+    tokio::spawn(generator::run(pool.clone()));
+    tokio::spawn(searcher::run(pool.clone()));
+    tokio::spawn(downloader::run(pool.clone()));
+    tokio::spawn(extractor::run(pool.clone()));
+    tokio::spawn(parser::run(pool.clone()));
+    tokio::spawn(follower::run(pool.clone()));
 
     let state = AppState {
-        connection,
+        pool,
     };
     
     let app = Router::new()
@@ -74,13 +93,23 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+#[tracing::instrument]
 async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
-    if word::add(state.connection.clone(), &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
-        info!("Added new input {}", request.keyword);
-        StatusCode::OK
-    } else {
-        info!("Rejected duplicate new input {}", request.keyword);
-        StatusCode::CONFLICT
+    match word::add(state.pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
+        Ok(was_added) => {
+            if was_added {
+                info!("Added new input {}", request.keyword);
+                StatusCode::OK
+            } else {
+                info!("Rejected duplicate new input {}", request.keyword);
+                StatusCode::CONFLICT
+            }
+        },
+        Err(err) => {
+            warn!("Error while submitting keyword: {} (source: {:?})", err, err.source());
+            StatusCode::INTERNAL_SERVER_ERROR
+        },
     }
+    
 }
 
