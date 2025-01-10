@@ -160,6 +160,8 @@ with_calories, with_carbohydrates, with_cholesterol, with_fat, with_fiber, with_
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
+    info!("Statistics updated");
+
     Ok(())
 }
 
@@ -169,11 +171,11 @@ pub async fn run(pool: Pool<MySql>) {
     let mut interval = interval(Duration::from_secs(30));
 
     loop {
+        interval.tick().await;
+
         if let Err(err) = update(pool.clone()).await {
             warn!("Error while updating statistics: {} (source: {:?})", err, err.source());
         }
-
-        interval.tick().await;
     }
 }
 
