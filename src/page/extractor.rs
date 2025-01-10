@@ -114,37 +114,29 @@ pub async fn run(pool: Pool<MySql>) {
             continue;
         }
 
-        if current_waiting_for_parsing.unwrap() >= MIN_WAITING_FOR_PARSING {
+        if current_waiting_for_parsing.unwrap() >= MIN_WAITING_FOR_PARSING || semaphore.available_permits() == 0 {
             continue;
         }
 
-        loop {
-            if semaphore.available_permits() == 0 {
-                break
-            }
+        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForExtraction, PageStatus::Extracting, semaphore.available_permits()).await;
+        if let Err(err) = next_jobs {
+            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
+            continue;
+        }
 
-            let next_job = page::next_job(pool.clone(), PageStatus::WaitingForExtraction, PageStatus::Extracting).await;
-            if let Err(err) = next_job {
-                warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-                break;
-            }
-
-            let Some(state) = next_job.unwrap() else {
-                break;
-            };
-            
+        for next_job in next_jobs.unwrap() {
             let sempahore = semaphore.clone();
             let pool = pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = extract(pool.clone(), state.clone()).await {
-                    warn!("Extractor encountered error on page #{} ('{}'): {} (source: {:?})", state.id, state.link, err, err.source());
-                    if let Err(err) = page::set_status(pool.clone(), state.id, PageStatus::ExtractionFailed).await {
-                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                if let Err(err) = extract(pool.clone(), next_job.clone()).await {
+                    warn!("Extractor encountered error on page #{} ('{}'): {} (source: {:?})", next_job.id, next_job.link, err, err.source());
+                    if let Err(err) = page::set_status(pool.clone(), next_job.id, PageStatus::ExtractionFailed).await {
+                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
-                    if let Err(err) = page::set_content(pool, state.id, None).await {
-                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                    if let Err(err) = page::set_content(pool, next_job.id, None).await {
+                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
                 }
             });

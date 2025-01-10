@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS link_blacklist (
 CREATE TABLE IF NOT EXISTS page (
     id              INT NOT NULL AUTO_INCREMENT,
     link            TEXT NOT NULL,
+    domain          TEXT NOT NULL,
     word_source     INT,
     follower_source INT,
     content         MEDIUMTEXT,

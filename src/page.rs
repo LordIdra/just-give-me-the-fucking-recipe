@@ -71,6 +71,7 @@ impl PageStatus {
 pub struct Page {
     pub id: i32,
     pub link: String,
+    pub domain: String,
     pub content: Option<String>,
     pub schema: Option<String>,
     pub priority: i32,
@@ -83,6 +84,7 @@ impl FromRow<'_, MySqlRow> for Page {
         Ok(Self {
             id: row.try_get("id")?,
             link: row.try_get("link")?,
+            domain: row.try_get("domain")?,
             content: row.try_get("content")?,
             schema: row.try_get("schema")?,
             priority: row.try_get("priority")?,
@@ -98,6 +100,7 @@ impl FromRow<'_, MySqlRow> for Page {
 pub async fn add(
     pool: Pool<MySql>, 
     link: &str, 
+    domain: &str, 
     word_source: Option<i32>, 
     follower_source: Option<i32>, 
     priority: i32, 
@@ -107,7 +110,7 @@ pub async fn add(
         return Ok(false);
     }
 
-    query("INSERT INTO page (link, priority, status) VALUES (?, ?, ?)")
+    query("INSERT INTO page (link, domain, priority, status) VALUES (?, ?, ?)")
         .bind(link)
         .bind(priority)
         .bind(status.to_string())
@@ -121,7 +124,7 @@ pub async fn add(
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn get(pool: Pool<MySql>, id: i32) -> Result<Page, BoxError> {
-    query_as::<_, Page>("SELECT id, link, content, schema, priority, status FROM page WHERE id = ?")
+    query_as::<_, Page>("SELECT id, link, domain, content, schema, priority, status FROM page WHERE id = ?")
         .bind(id)
         .fetch_one(&pool)
         .await
@@ -230,24 +233,28 @@ async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn next_job(pool: Pool<MySql>, status_from: PageStatus, status_to: PageStatus) -> Result<Option<Page>, BoxError> {
+async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageStatus, limit: usize) -> Result<Vec<Page>, BoxError> {
+    assert!(limit > 0);
     let tx = pool.begin()
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(result) = query_as::<_, Page>("SELECT id, link, content, schema, priority, status FROM page WHERE status = ? ORDER BY priority DESC LIMIT 1")
+    let result = query_as::<_, Page>("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? ORDER BY priority DESC GROUP BY domain LIMIT ?")
         .bind(status_from.to_string())
-        .fetch_optional(&pool)
+        .bind(limit as i32)
+        .fetch_all(&pool)
         .await
-        .map_err(|err| Box::new(err) as BoxError)?
-    else {
-        return Ok(None)
-    };
+        .map_err(|err| Box::new(err) as BoxError)?;
 
-    query("UPDATE page SET status = ? WHERE id = ?")
-        .bind(status_to.to_string())
-        .bind(result.id)
-        .execute(&pool)
+    let statement = "UPDATE page SET status = ? WHERE id IN (".to_string() + &"?, ".repeat(limit - 1) + "?)";
+    let mut q = query(&statement)
+        .bind(status_to.to_string());
+
+    for page in &result {
+        q = q.bind(page.id);
+    }
+    
+    q.execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -255,6 +262,6 @@ async fn next_job(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSta
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(Some(result))
+    Ok(result)
 }
 

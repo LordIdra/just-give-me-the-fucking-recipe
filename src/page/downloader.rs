@@ -13,7 +13,7 @@ use super::Page;
 
 const MIN_WAITING_FOR_EXTRACTION: i32 = 100;
 
-const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(3000);
+const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(5000);
 
 static SEMAPHORES: LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -44,7 +44,7 @@ pub fn headers() -> HeaderMap {
     headers.insert("Sec-Fetch-User", "?1".parse().unwrap());
     headers.insert("Sec-Gpc", "1".parse().unwrap());
     headers.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
-    headers.insert("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36".parse().unwrap());
+    headers.insert("User-Agent", "Prototype recipe search engine indexer".parse().unwrap());
     headers
 }
 
@@ -118,7 +118,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
     
     let client = builder.build().unwrap();
 
-    let semaphore = Arc::new(Semaphore::new(4096));
+    let semaphore = Arc::new(Semaphore::new(2048));
 
     let mut interval = interval(Duration::from_millis(500));
 
@@ -131,35 +131,27 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             continue;
         }
 
-        if current_waiting_for_extraction.unwrap() >= MIN_WAITING_FOR_EXTRACTION {
+        if current_waiting_for_extraction.unwrap() >= MIN_WAITING_FOR_EXTRACTION || semaphore.available_permits() == 0 {
             continue;
         }
 
-        loop {
-            if semaphore.available_permits() == 0 {
-                break
-            }
+        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForDownload, PageStatus::Downloading, semaphore.available_permits()).await;
+        if let Err(err) = next_jobs {
+            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
+            continue;
+        }
 
-            let next_job = page::next_job(pool.clone(), PageStatus::WaitingForDownload, PageStatus::Downloading).await;
-            if let Err(err) = next_job {
-                warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-                break;
-            }
-
-            let Some(state) = next_job.unwrap() else {
-                break;
-            };
-            
+        for next_job in next_jobs.unwrap() {
             let sempahore = semaphore.clone();
             let client = client.clone();
             let pool = pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = download(pool.clone(), client, state.clone()).await {
-                    warn!("Downloader encountered error on page #{} ('{}'): {} (source: {:?})", state.id, state.link, err, err.source());
-                    if let Err(err) = page::set_status(pool.clone(), state.id, PageStatus::DownloadFailed).await {
-                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                if let Err(err) = download(pool.clone(), client, next_job.clone()).await {
+                    warn!("Downloader encountered error on page #{} ('{}'): {} (source: {:?})", next_job.id, next_job.link, err, err.source());
+                    if let Err(err) = page::set_status(pool.clone(), next_job.id, PageStatus::DownloadFailed).await {
+                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
                 }
             });

@@ -50,8 +50,14 @@ async fn follow(pool: Pool<MySql>, page: Page) -> Result<(), BoxError> {
 
     let mut added_links = vec![];
     for link in &links {
-        if page::add(pool.clone(), link, None, Some(page.id), -1000, PageStatus::WaitingForDownload).await? {
-            added_links.push(link);
+        if let Some(domain) = Url::parse(link)
+                .ok()
+                .and_then(|url| url.domain()
+                    .map(|domain| domain.to_owned())
+                ) {
+            if page::add(pool.clone(), link, &domain, None, Some(page.id), -1000, PageStatus::WaitingForDownload).await? {
+                added_links.push(link);
+            }
         }
     }
 
@@ -73,33 +79,29 @@ pub async fn run(pool: Pool<MySql>) {
     loop {
         interval.tick().await;
 
-        loop {
-            if semaphore.available_permits() == 0 {
-                break
-            }
+        if semaphore.available_permits() == 0 {
+            continue;
+        }
 
-            let next_job = page::next_job(pool.clone(), PageStatus::WaitingForFollowing, PageStatus::Following).await;
-            if let Err(err) = next_job {
-                warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-                break;
-            }
+        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForFollowing, PageStatus::Following, semaphore.available_permits()).await;
+        if let Err(err) = next_jobs {
+            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
+            continue;
+        }
 
-            let Some(state) = next_job.unwrap() else {
-                break;
-            };
-            
+        for next_job in next_jobs.unwrap() {
             let sempahore = semaphore.clone();
             let pool = pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = follow(pool.clone(), state.clone()).await {
-                    warn!("Follower encountered error on page #{} ('{}'): {} (source: {:?})", state.id, state.link, err, err.source());
-                    if let Err(err) = page::set_status(pool.clone(), state.id, PageStatus::FollowingFailed).await {
-                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                if let Err(err) = follow(pool.clone(), next_job.clone()).await {
+                    warn!("Follower encountered error on page #{} ('{}'): {} (source: {:?})", next_job.id, next_job.link, err, err.source());
+                    if let Err(err) = page::set_status(pool.clone(), next_job.id, PageStatus::FollowingFailed).await {
+                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
-                    if let Err(err) = page::set_content(pool, state.id, None).await {
-                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                    if let Err(err) = page::set_content(pool, next_job.id, None).await {
+                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
                 }
             });

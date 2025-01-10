@@ -412,36 +412,31 @@ pub async fn run(pool: Pool<MySql>) {
     let mut interval = interval(std::time::Duration::from_millis(500));
 
     loop {
-        loop {
-            if semaphore.available_permits() == 0 {
-                break
-            }
+        if semaphore.available_permits() == 0 {
+            continue;
+        }
 
-            let next_job = page::next_job(pool.clone(), PageStatus::WaitingForParsing, PageStatus::Parsing).await;
-            if let Err(err) = next_job {
-                warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-                break;
-            }
+        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForParsing, PageStatus::Parsing, semaphore.available_permits()).await;
+        if let Err(err) = next_jobs {
+            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
+            continue;
+        }
 
-            let Some(state) = next_job.unwrap() else {
-                break;
-            };
-            
+        for next_job in next_jobs.unwrap() {
             let sempahore = semaphore.clone();
             let pool = pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = parse(pool.clone(), state.clone()).await {
-                    warn!("Parser encountered error on page #{} ('{}'): {} (source: {:?})", state.id, state.link, err, err.source());
-                    if let Err(err) = page::set_status(pool.clone(), state.id, PageStatus::ParsingIncompleteRecipe).await {
-                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                if let Err(err) = parse(pool.clone(), next_job.clone()).await {
+                    warn!("Parser encountered error on page #{} ('{}'): {} (source: {:?})", next_job.id, next_job.link, err, err.source());
+                    if let Err(err) = page::set_status(pool.clone(), next_job.id, PageStatus::ParsingIncompleteRecipe).await {
+                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
-                    if let Err(err) = page::set_schema(pool, state.id, None).await {
-                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", state.id, state.link, err, err.source());
+                    if let Err(err) = page::set_schema(pool, next_job.id, None).await {
+                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
                     }
                 }
-                
             });
         }
 

@@ -6,6 +6,7 @@ use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
 use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
+use url::Url;
 
 use crate::{page::{self, PageStatus}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
 
@@ -79,12 +80,22 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
         }
     }
 
-    let link_names: Vec<String> = links.iter().map(|link| link.link.clone()).collect();
+    let link_names: Vec<String> = links.iter()
+        .map(|link| link.link.clone())
+        .collect();
 
     for link in links {
+        let parsed_url = Url::parse(&link.link)
+            .map_err(|err| Box::new(err) as BoxError)?;
+
+        let Some(domain) = parsed_url.domain() else {
+            continue;
+        };
+
         page::add(
             pool.clone(), 
             &link.link, 
+            domain,
             Some(word.id),
             None,
             word.priority, 
