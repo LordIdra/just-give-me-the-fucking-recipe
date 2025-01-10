@@ -10,7 +10,8 @@ use crate::{page::PageStatus, word::WordStatus, BoxError};
 struct Count(i32);
 
 async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i32, BoxError> {
-    Ok(query_as::<_, Count>("SELECT count(*) FROM word WHERE status = ?")
+    dbg!(1);
+    Ok(query_as::<_, Count>("SELECT COUNT(*) FROM word WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
         .await
@@ -19,7 +20,8 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i32, B
 }
 
 async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i32, BoxError> {
-    Ok(query_as::<_, Count>("SELECT count(*) FROM page WHERE status = ?")
+    dbg!(2);
+    Ok(query_as::<_, Count>("SELECT COUNT(*) FROM page WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
         .await
@@ -28,7 +30,8 @@ async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i32, B
 }
 
 async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i32, BoxError> {
-    Ok(query_as::<_, Count>("SELECT sum(content_size) FROM page")
+    dbg!(3);
+    Ok(query_as::<_, Count>("SELECT SUM(content_size) FROM page")
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
@@ -36,7 +39,8 @@ async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i32, BoxError> {
 }
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i32, BoxError> {
-    Ok(query_as::<_, Count>("SELECT count(*) FROM ?")
+    dbg!(4);
+    Ok(query_as::<_, Count>("SELECT COUNT(*) FROM ?")
         .bind(table.to_string())
         .fetch_one(&pool)
         .await
@@ -45,6 +49,7 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i32, BoxError> {
 }
 
 async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<i32, BoxError> {
+    dbg!(5);
     Ok(query_as::<_, Count>("SELECT COUNT(DISTINCT recipe.id) FROM recipe JOIN ? ON recipe.id = ?.recipe")
         .bind(table.to_string())
         .fetch_one(&pool)
@@ -54,7 +59,8 @@ async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Res
 }
 
 async fn fetch_recipes_with_column(pool: Pool<MySql>, table: &str) -> Result<i32, BoxError> {
-    Ok(query_as::<_, Count>("SELECT count(*) FROM recipe WHERE ? IS NOT NULL")
+    dbg!(6);
+    Ok(query_as::<_, Count>("SELECT COUNT(*) FROM recipe WHERE ? IS NOT NULL")
         .bind(table.to_string())
         .fetch_one(&pool)
         .await
