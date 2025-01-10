@@ -45,6 +45,8 @@ struct Args {
     openai_key: String,
     #[arg(long)]
     proxy: String,
+    #[arg(long)]
+    database_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +71,7 @@ async fn main() {
     
     let pool = MySqlPoolOptions::new()
         .max_connections(8)
-        .connect("mysql://root:jibbletastic@localhost/recipe")
+        .connect(&args.database_url)
         .await
         .expect("Failed to connect to database");
 
