@@ -31,7 +31,7 @@ async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i64, B
 
 async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
     dbg!(3);
-    Ok(query_as::<_, OneBigInt>("SELECT CAST(SUM(content_size) AS UNSIGNED INT) FROM page")
+    Ok(query_as::<_, OneBigInt>("SELECT CAST(SUM(content_size) AS INT) FROM page")
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
