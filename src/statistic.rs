@@ -10,7 +10,7 @@ use crate::{page::PageStatus, word::WordStatus, BoxError};
 struct OneInt(i32);
 
 #[derive(FromRow)]
-struct OneFloat(f32);
+struct OneBigInt(i64);
 
 async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i32, BoxError> {
     dbg!(1);
@@ -24,7 +24,7 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i32, B
 
 async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i32, BoxError> {
     dbg!(2);
-    Ok(query_as::<_, OneFloat>("SELECT COUNT(*) FROM page WHERE status = ?")
+    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM page WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
         .await
