@@ -117,3 +117,17 @@ CREATE TABLE IF NOT EXISTS recipe_ingredient (
     FOREIGN KEY (ingredient) REFERENCES ingredient(id)
 );
 
+CREATE TABLE IF NOT EXISTS instruction (
+    id          INT NOT NULL AUTO_INCREMENT,
+    instruction TEXT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS recipe_instruction (
+    recipe      INT NOT NULL,
+    instruction INT NOT NULL,
+    PRIMARY KEY (recipe, instruction),
+    FOREIGN KEY (recipe) REFERENCES recipe(id),
+    FOREIGN KEY (instruction) REFERENCES instruction(id)
+);
+

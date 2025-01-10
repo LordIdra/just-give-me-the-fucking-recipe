@@ -219,6 +219,22 @@ fn ingredients(v: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn instructions(v: &Value) -> Vec<String> {
+    v.get("recipeInstructions")
+        .and_then(|v| v.as_array())
+        .and_then(|v| v.iter()
+            .map(|v| v.as_str()
+                .map(|v| v.to_owned())
+                .or(v.get("text")
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.to_owned())
+                )
+            )
+            .collect::<Option<Vec<String>>>()
+        )
+        .unwrap_or_default()
+}
+
 fn rating(v: &Value) -> Option<f32> {
     v.get("aggregateRating")
         .and_then(|v| {
@@ -364,6 +380,7 @@ async fn parse(pool: Pool<MySql>, page: Page) -> Result<(), BoxError> {
         cook_time_seconds: cook_time(&v),
         total_time_seconds: total_time(&v).or_else(|| Some(prep_time(&v)? + cook_time(&v)?)),
         ingredients: ingredients(&v),
+        instructions: instructions(&v),
         rating: rating(&v),
         rating_count: rating_count(&v),
         keywords: keywords(&v),

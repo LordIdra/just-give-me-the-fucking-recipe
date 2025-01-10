@@ -24,6 +24,7 @@ pub struct Recipe {
     pub total_time_seconds: Option<Duration>,
     pub servings: Option<String>,
     pub ingredients: Vec<String>,
+    pub instructions: Vec<String>,
     pub nutrition: Nutrition,
 }
 
@@ -170,6 +171,22 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
         query("INSERT INTO recipe_ingredient (recipe, ingredient) VALUES (?, ?)")
             .bind(recipe_id)
             .bind(ingredient_id)
+            .execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+    }
+
+    for instruction in &recipe.instructions {
+        let instruction_id = query("INSERT INTO instruction (instruction) VALUES (?)")
+            .bind(instruction)
+            .execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?
+            .last_insert_id();
+
+        query("INSERT INTO recipe_instruction (recipe, instruction) VALUES (?, ?)")
+            .bind(recipe_id)
+            .bind(instruction_id)
             .execute(&pool)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
