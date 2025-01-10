@@ -111,7 +111,7 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
 
     for keyword in &recipe.keywords {
         let keyword_id = match get_keyword_id(pool.clone(), keyword).await? {
-            Some(id) => id,
+            Some(id) => dbg!(id),
             None => query("INSERT INTO keyword (keyword) VALUES (?)")
                 .bind(keyword)
                 .execute(&pool)
