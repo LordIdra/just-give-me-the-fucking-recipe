@@ -21,7 +21,7 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i32, B
 
 async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i32, BoxError> {
     dbg!(2);
-    Ok(query_as::<_, Count>("SELECT CAST(COUNT(*) as UNSIGNED INT) FROM page WHERE status = ?")
+    Ok(query_as::<_, Count>("SELECT CAST(COUNT(*) as INT) FROM page WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
         .await
