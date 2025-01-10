@@ -10,7 +10,6 @@ use crate::{page::PageStatus, word::WordStatus, BoxError};
 struct OneBigInt(i64);
 
 async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, BoxError> {
-    dbg!(1);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM word WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
@@ -20,7 +19,6 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, B
 }
 
 async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i64, BoxError> {
-    dbg!(2);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM page WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
@@ -30,7 +28,6 @@ async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i64, B
 }
 
 async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
-    dbg!(3);
     Ok(query_as::<_, OneBigInt>("SELECT CAST(SUM(content_size) AS INT) FROM page")
         .fetch_one(&pool)
         .await
@@ -39,7 +36,6 @@ async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
 }
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
-    dbg!(4);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM ?")
         .bind(table.to_string())
         .fetch_one(&pool)
@@ -49,7 +45,6 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
 }
 
 async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
-    dbg!(5);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(DISTINCT recipe.id) FROM recipe JOIN ? ON recipe.id = ?.recipe")
         .bind(table.to_string())
         .fetch_one(&pool)
@@ -98,7 +93,7 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
 timestamp, waiting_for_download, downloading, download_failed, waiting_for_extraction, extracting, extraction_failed,
 waiting_for_parsing, parsing, parsing_incomplete_recipe, waiting_for_following, following, following_complete, following_failed,
 total_content_size
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
         .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForDownload).await?)
         .bind(fetch_page_status(pool.clone(), PageStatus::Downloading).await?)
