@@ -110,8 +110,9 @@ pub async fn add(
         return Ok(false);
     }
 
-    query("INSERT INTO page (link, domain, priority, status) VALUES (?, ?, ?)")
+    query("INSERT INTO page (link, domain, priority, status) VALUES (?, ?, ?, ?)")
         .bind(link)
+        .bind(domain)
         .bind(priority)
         .bind(status.to_string())
         .execute(&pool)
