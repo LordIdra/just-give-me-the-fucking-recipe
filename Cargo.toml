@@ -20,11 +20,8 @@ iso8601 = "0.6.1"
 dateparser = "0.2.1"
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-tracy-client = { version = "0.16.4", optional = true }
-tracing-tracy = { version = "0.10.4", optional = true }
-
-[features]
-profiling = ["tracy-client", "tracing-tracy"]
+tracy-client = "0.16.4"
+tracing-tracy = "0.10.4"
 
 [profile.dev]
 opt-level = 3

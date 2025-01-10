@@ -9,7 +9,6 @@ use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
 use tracing_subscriber::Layer;
-#[cfg(feature = "profiling")]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use word::{classifier, generator, searcher, WordStatus};
 
@@ -56,9 +55,6 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(not(feature = "profiling"))]
-    tracing_subscriber::fmt::init();
-    #[cfg(feature = "profiling")]
     tracing_subscriber::registry()
         .with(tracing_tracy::TracyLayer::default())
         .with(tracing_subscriber::fmt::layer()
