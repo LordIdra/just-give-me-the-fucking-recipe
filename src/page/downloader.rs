@@ -109,7 +109,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String) {
     info!("Started downloader");
 
     let client = ClientBuilder::new()
-        .proxy(Proxy::all(proxy).unwrap())
+        //.proxy(Proxy::all(proxy).unwrap())
         .build()
         .unwrap();
 
