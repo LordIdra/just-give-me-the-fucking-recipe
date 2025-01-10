@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS recipe_instruction (
 );
 
 CREATE TABLE IF NOT EXISTS word_statistic (
-    timestamp                  INT NOT NULL,
+    timestamp                  DateTime NOT NULL,
     waiting_for_generation     INT NOT NULL,
     generating                 INT NOT NULL,
     generation_failed          INT NOT NULL,
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS word_statistic (
 );
 
 CREATE TABLE IF NOT EXISTS page_statistic (
-    timestamp                 INT NOT NULL,
+    timestamp                 DateTime NOT NULL,
     waiting_for_download      INT NOT NULL,
     downloading               INT NOT NULL,
     download_failed           INT NOT NULL,
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS page_statistic (
 );
 
 CREATE TABLE IF NOT EXISTS recipe_component_statistic (
-    timestamp         INT NOT NULL,
+    timestamp         DateTime NOT NULL,
     recipe_count      INT NOT NULL,
     keyword_count     INT NOT NULL,
     author_count      INT NOT NULL,
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS recipe_component_statistic (
 );
 
 CREATE TABLE IF NOT EXISTS recipe_statistic (
-    timestamp               INT NOT NULL,
+    timestamp               DateTime NOT NULL,
     with_keywords           INT NOT NULL,
     with_authors            INT NOT NULL,
     with_images             INT NOT NULL,

@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use log::{info, warn};
 use sqlx::{query, query_as, FromRow, MySql, Pool};
@@ -65,16 +65,13 @@ async fn fetch_recipes_with_column(pool: Pool<MySql>, table: &str) -> Result<i32
 #[tracing::instrument(skip(pool))]
 #[must_use]
 async fn update(pool: Pool<MySql>) -> Result<(), BoxError> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let timestamp = chrono::offset::Utc::now();
 
     query("INSERT INTO word_statistic (
 timestamp, waiting_for_generation, generating, generation_failed, generation_complete, waiting_for_classification,
 classifying, classification_failed, classified_as_invalid, waiting_for_search, searching, search_failed, search_complete
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp.to_string())
+        .bind(timestamp)
         .bind(fetch_word_status(pool.clone(), WordStatus::WaitingForGeneration).await?)
         .bind(fetch_word_status(pool.clone(), WordStatus::Generating).await?)
         .bind(fetch_word_status(pool.clone(), WordStatus::GenerationFailed).await?)
@@ -96,7 +93,7 @@ timestamp, waiting_for_download, downloading, download_failed, waiting_for_extra
 waiting_for_parsing, parsing, parsing_incomplete_recipe, waiting_for_following, following, following_complete, following_failed,
 total_content_size
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp.to_string())
+        .bind(timestamp)
         .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForDownload).await?)
         .bind(fetch_page_status(pool.clone(), PageStatus::Downloading).await?)
         .bind(fetch_page_status(pool.clone(), PageStatus::DownloadFailed).await?)
@@ -118,7 +115,7 @@ total_content_size
     query("INSERT INTO recipe_component_statistic (
 timestamp, recipe_count, keyword_count, author_count, image_count, ingredient_count, instruction_count
 ) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp.to_string())
+        .bind(timestamp)
         .bind(fetch_count(pool.clone(), "recipe").await?)
         .bind(fetch_count(pool.clone(), "keyword").await?)
         .bind(fetch_count(pool.clone(), "author").await?)
@@ -134,7 +131,7 @@ timestamp, with_keywords, with_authors, with_images, with_ingredients, with_inst
 with_rating, with_rating_count, with_prep_time_seconds, with_cook_time_seconds, with_total_time_seconds, with_servings, 
 with_calories, with_carbohydrates, with_cholesterol, with_fat, with_fiber, with_protein, with_saturated_fat, with_sodium, with_sugar
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp.to_string())
+        .bind(timestamp)
         .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_keyword").await?)
         .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_author").await?)
         .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_image").await?)
@@ -171,11 +168,11 @@ pub async fn run(pool: Pool<MySql>) {
     let mut interval = interval(Duration::from_secs(30));
 
     loop {
-        interval.tick().await;
-
         if let Err(err) = update(pool.clone()).await {
             warn!("Error while updating statistics: {} (source: {:?})", err, err.source());
         }
+
+        interval.tick().await;
     }
 }
 
