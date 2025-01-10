@@ -55,12 +55,16 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::registry()
-        .with(tracing_tracy::TracyLayer::default())
+    let registry = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
-            .with_line_number(true)
-            .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")))
-        .init();
+        .with_line_number(true)
+        .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")));
+
+    #[cfg(feature = "profiling")]
+    let registry = registry.with(tracing_tracy::TracyLayer::default());
+
+    registry.init();
+
     info!("Starting...");
 
     let args = Args::parse();
