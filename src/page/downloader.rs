@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt, sync::{Arc, LazyLock}, time::
 
 use axum::http::HeaderMap;
 use log::{info, warn};
-use reqwest::{Client, Method};
+use reqwest::{Client, ClientBuilder, Method, Proxy};
 use sqlx::{MySql, Pool};
 use tokio::{sync::{Mutex, Semaphore}, time::{interval, sleep}};
 use url::Url;
@@ -105,10 +105,13 @@ async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), B
     result
 }
 
-pub async fn run(pool: Pool<MySql>) {
+pub async fn run(pool: Pool<MySql>, proxy: String) {
     info!("Started downloader");
 
-    let client = Client::new();
+    let client = ClientBuilder::new()
+        .proxy(Proxy::all(proxy).unwrap())
+        .build()
+        .unwrap();
 
     let semaphore = Arc::new(Semaphore::new(256));
 

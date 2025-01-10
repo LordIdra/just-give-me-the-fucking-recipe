@@ -44,10 +44,10 @@ struct Output {
 }
 
 #[tracing::instrument(skip(pool, client))]
-async fn generate(pool: Pool<MySql>, client: Client, job: Word) -> Result<(), BoxError> {
+async fn generate(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
     let input = format!("List as many foods as you possibly can in the food category: {:?}. Just output the name of each food without extra detail.", job.word);
 
-    let response = gpt::query_gpt::<Output>(&client, response_format(), input).await?;
+    let response = gpt::query_gpt::<Output>(&client, response_format(), openai_key, input).await?;
     for output in response.output {
         if word::add(pool.clone(), &output, Some(job.id), -1, WordStatus::WaitingForClassification).await? {
             info!("Added generated word {}", output)
@@ -61,7 +61,7 @@ async fn generate(pool: Pool<MySql>, client: Client, job: Word) -> Result<(), Bo
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>) {
+pub async fn run(pool: Pool<MySql>, openai_key: String) {
     info!("Started generator");
 
     let client = Client::new();
@@ -101,10 +101,11 @@ pub async fn run(pool: Pool<MySql>) {
             let sempahore = semaphore.clone();
             let client = client.clone();
             let pool = pool.clone();
+            let openai_key = openai_key.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = generate(pool.clone(), client, state.clone()).await {
+                if let Err(err) = generate(pool.clone(), client, openai_key.clone(), state.clone()).await {
                     warn!("Generator encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
                     if let Err(err) = word::set_status(pool, state.id, WordStatus::GenerationFailed).await {
                         warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());

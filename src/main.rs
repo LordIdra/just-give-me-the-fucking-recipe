@@ -41,6 +41,10 @@ struct SubmitKeyword {
 struct Args {
     #[arg(short, long)]
     port: usize,
+    #[arg(short, long)]
+    openai_key: String,
+    #[arg(short, long)]
+    proxy: String,
 }
 
 #[derive(Debug, Clone)]
@@ -72,10 +76,10 @@ async fn main() {
     word::reset_tasks(pool.clone()).await.expect("Failed to reset word tasks");
     page::reset_tasks(pool.clone()).await.expect("Failed to reset page tasks");
 
-    tokio::spawn(classifier::run(pool.clone()));
-    tokio::spawn(generator::run(pool.clone()));
+    tokio::spawn(classifier::run(pool.clone(), args.openai_key.clone()));
+    tokio::spawn(generator::run(pool.clone(), args.openai_key));
     tokio::spawn(searcher::run(pool.clone()));
-    tokio::spawn(downloader::run(pool.clone()));
+    tokio::spawn(downloader::run(pool.clone(), args.proxy));
     tokio::spawn(extractor::run(pool.clone()));
     tokio::spawn(parser::run(pool.clone()));
     tokio::spawn(follower::run(pool.clone()));

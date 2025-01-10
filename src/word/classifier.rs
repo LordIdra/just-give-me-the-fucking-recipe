@@ -57,9 +57,9 @@ struct Classification {
 }
 
 #[tracing::instrument(skip(pool, client))]
-async fn classify(pool: Pool<MySql>, client: Client, job: Word) -> Result<(), BoxError> {
+async fn classify(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
     let input = format!("Is this a specific food, a category of foods, or neither? {}", job.word);
-    let response = gpt::query_gpt::<Classification>(&client, response_format(), input).await?;
+    let response = gpt::query_gpt::<Classification>(&client, response_format(), openai_key, input).await?;
 
     match response.classification.as_str() {
         "specific" => {
@@ -83,7 +83,7 @@ async fn classify(pool: Pool<MySql>, client: Client, job: Word) -> Result<(), Bo
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>) {
+pub async fn run(pool: Pool<MySql>, openai_key: String) {
     info!("Started classifier");
 
     let client = Client::new();
@@ -124,10 +124,11 @@ pub async fn run(pool: Pool<MySql>) {
             let sempahore = semaphore.clone();
             let client = client.clone();
             let pool = pool.clone();
+            let openai_key = openai_key.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = classify(pool.clone(), client, state.clone()).await {
+                if let Err(err) = classify(pool.clone(), client, openai_key, state.clone()).await {
                     warn!("Classifier encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
                     if let Err(err) = word::set_status(pool, state.id, WordStatus::ClassificationFailed).await {
                         warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());
