@@ -145,7 +145,7 @@ with_calories, with_carbohydrates, with_cholesterol, with_fat, with_fiber, with_
         .bind(fetch_recipes_with_column(pool.clone(), "rating_count").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "prep_time_seconds").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "cook_time_seconds").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "total_time_second").await?)
+        .bind(fetch_recipes_with_column(pool.clone(), "total_time_seconds").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "servings").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "calories").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "carbohydrates").await?)
