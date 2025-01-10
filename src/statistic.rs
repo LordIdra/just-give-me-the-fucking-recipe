@@ -36,12 +36,11 @@ async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
 }
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
-    Ok(dbg!(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM ?")
-        .bind(table.to_string())
+    Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM {}", table))
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
-        .0))
+        .0)
 }
 
 async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
@@ -54,7 +53,6 @@ async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Res
 }
 
 async fn fetch_recipes_with_column(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
-    dbg!(6);
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM recipe WHERE ? IS NOT NULL")
         .bind(table.to_string())
         .fetch_one(&pool)
