@@ -39,11 +39,11 @@ struct SubmitKeyword {
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(long)]
     port: usize,
-    #[arg(short, long)]
+    #[arg(long)]
     openai_key: String,
-    #[arg(short, long)]
+    #[arg(long)]
     proxy: String,
 }
 
