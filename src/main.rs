@@ -43,6 +43,8 @@ struct Args {
     #[arg(long)]
     openai_key: String,
     #[arg(long)]
+    serper_key: String,
+    #[arg(long)]
     proxy: String,
     #[arg(long)]
     database_url: String,
@@ -80,7 +82,7 @@ async fn main() {
 
     tokio::spawn(classifier::run(pool.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(pool.clone(), args.openai_key));
-    tokio::spawn(searcher::run(pool.clone()));
+    tokio::spawn(searcher::run(pool.clone(), args.serper_key));
     tokio::spawn(downloader::run(pool.clone(), args.proxy));
     tokio::spawn(extractor::run(pool.clone()));
     tokio::spawn(parser::run(pool.clone()));

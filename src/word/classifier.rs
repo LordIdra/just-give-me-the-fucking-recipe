@@ -56,7 +56,7 @@ struct Classification {
     classification: String,
 }
 
-#[tracing::instrument(skip(pool, client))]
+#[tracing::instrument(skip(pool, client, openai_key))]
 async fn classify(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
     let input = format!("Is this a specific food, a category of foods, or neither? {}", job.word);
     let response = gpt::query_gpt::<Classification>(&client, response_format(), openai_key, input).await?;

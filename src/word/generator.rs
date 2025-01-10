@@ -43,7 +43,7 @@ struct Output {
     output: Vec<String>,
 }
 
-#[tracing::instrument(skip(pool, client))]
+#[tracing::instrument(skip(pool, client, openai_key))]
 async fn generate(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
     let input = format!("List as many foods as you possibly can in the food category: {:?}. Just output the name of each food without extra detail.", job.word);
 

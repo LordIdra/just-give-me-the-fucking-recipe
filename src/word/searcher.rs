@@ -9,7 +9,6 @@ use tokio::{sync::Semaphore, time::interval};
 
 use crate::{page::{self, PageStatus}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
 
-const SERPER_API_KEY: &str = "25a6cb43d17d54a402297c591f06f387a080bc2e";
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
 const MIN_WAITING_FOR_DOWNLOAD: i32 = 100;
@@ -38,11 +37,11 @@ struct SiteLink {
     link: String,
 }
 
-#[tracing::instrument(skip(pool, client))]
-async fn search(pool: Pool<MySql>, client: Client, word: Word) -> Result<(), BoxError> {
+#[tracing::instrument(skip(pool, client, serper_key))]
+async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Word) -> Result<(), BoxError> {
     let query = word.word.clone() + "recipe";
     let mut headers = HeaderMap::new();
-    headers.insert("X-API-KEY", SERPER_API_KEY.parse().unwrap());
+    headers.insert("X-API-KEY", serper_key.parse().unwrap());
     headers.insert("Content-Type", "application/json".parse().unwrap());
 
     let response = client.request(Method::POST, SERPER_API_URL)
@@ -100,7 +99,7 @@ async fn search(pool: Pool<MySql>, client: Client, word: Word) -> Result<(), Box
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>) {
+pub async fn run(pool: Pool<MySql>, serper_key: String) {
     info!("Started searcher");
 
     let client = Client::new();
@@ -139,11 +138,12 @@ pub async fn run(pool: Pool<MySql>) {
             
             let sempahore = semaphore.clone();
             let client = client.clone();
+            let serper_key = serper_key.clone();
             let pool = pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = search(pool.clone(), client, state.clone()).await {
+                if let Err(err) = search(pool.clone(), client, serper_key, state.clone()).await {
                     warn!("Searcher encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
                     if let Err(err) = word::set_status(pool, state.id, WordStatus::SearchFailed).await {
                         warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());

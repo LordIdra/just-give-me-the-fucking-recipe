@@ -22,7 +22,7 @@ struct MessageResponse {
     content: String,
 }
 
-#[tracing::instrument(skip(client, response_format))]
+#[tracing::instrument(skip(client, response_format, api_key))]
 pub async fn query_gpt<T: for<'a> Deserialize<'a>>(client: &Client, response_format: Value, api_key: String, input: String) -> Result<T, BoxError> {
     let _permit = GPT_SEMAPHORE.acquire().await.unwrap();
 
