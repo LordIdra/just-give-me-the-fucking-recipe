@@ -222,6 +222,7 @@ LIMIT {limit}"#))
     Ok(links)
 }
 
+#[tracing::instrument(skip(pool, client, semaphore))]
 pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore>, link: Link) {
     let _permit = semaphore.acquire().await.unwrap();
 

@@ -12,7 +12,7 @@ use crate::{link::{self, LinkStatus}, word::{self, Word, WordStatus}, BoxError, 
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
-const MIN_WAITING_FOR_DOWNLOAD: i32 = 100;
+const MIN_WAITING_FOR_PROCESSING: i32 = 100;
 
 #[derive(Debug, Serialize)]
 struct SerperRequest {
@@ -122,13 +122,13 @@ pub async fn run(pool: Pool<MySql>, serper_key: String) {
     loop {
         interval.tick().await;
 
-        let current_waiting_for_download = link::links_with_status_by_domain(pool.clone(), LinkStatus::WaitingForProcessing).await;
-        if let Err(err) = current_waiting_for_download {
-            warn!("Error while getting words with status WAITING_FOR_DOWNLOAD: {} (source: {:?})", err, err.source());
+        let current_waiting_for_processing = link::links_with_status_by_domain(pool.clone(), LinkStatus::WaitingForProcessing).await;
+        if let Err(err) = current_waiting_for_processing {
+            warn!("Error while getting words with status WAITING_FOR_PROCESSING: {} (source: {:?})", err, err.source());
             continue;
         }
 
-        if current_waiting_for_download.unwrap() >= MIN_WAITING_FOR_DOWNLOAD {
+        if current_waiting_for_processing.unwrap() >= MIN_WAITING_FOR_PROCESSING {
             continue;
         }
 
