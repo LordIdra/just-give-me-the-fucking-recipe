@@ -5,18 +5,18 @@ use std::{error::Error, fmt};
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
 use log::{info, warn};
-use page::{downloader, extractor, follower, parser};
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
-use tracing_subscriber::Layer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+#[cfg(not(feature = "profiling"))]
+use tracing_subscriber::{Layer, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use word::{classifier, generator, searcher, WordStatus};
 
 mod gpt;
+mod link;
 mod link_blacklist;
-mod page;
 mod recipe;
 mod statistic;
 mod word;
@@ -62,13 +62,15 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(not(feature = "profiling"))]
     let registry = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
         .with_line_number(true)
         .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")));
 
     #[cfg(feature = "profiling")]
-    let registry = registry.with(tracing_tracy::TracyLayer::default());
+    let registry = tracing_subscriber::registry()
+        .with(tracing_tracy::TracyLayer::default());
 
     registry.init();
 
@@ -91,15 +93,12 @@ async fn main() {
         .expect("Failed to connect to database");
 
     word::reset_tasks(pool.clone()).await.expect("Failed to reset word tasks");
-    page::reset_tasks(pool.clone()).await.expect("Failed to reset page tasks");
+    link::reset_tasks(pool.clone()).await.expect("Failed to reset link tasks");
 
     tokio::spawn(classifier::run(pool.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(pool.clone(), args.openai_key));
     tokio::spawn(searcher::run(pool.clone(), args.serper_key));
-    tokio::spawn(downloader::run(pool.clone(), args.proxy, certificates));
-    tokio::spawn(extractor::run(pool.clone()));
-    tokio::spawn(parser::run(pool.clone()));
-    tokio::spawn(follower::run(pool.clone()));
+    tokio::spawn(link::run(pool.clone(), args.proxy, certificates));
     tokio::spawn(statistic::run(pool.clone()));
 
     let state = AppState {

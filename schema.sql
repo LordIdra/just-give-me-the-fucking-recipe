@@ -18,28 +18,24 @@ CREATE TABLE IF NOT EXISTS link_blacklist (
     PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS page (
+CREATE TABLE IF NOT EXISTS link (
     id              INT NOT NULL AUTO_INCREMENT,
     link            TEXT NOT NULL,
     domain          TEXT NOT NULL,
     word_source     INT,
     follower_source INT,
-    content         MEDIUMTEXT,
     content_size    INT,
-    schema          MEDIUMTEXT,
     priority        INT NOT NULL,
     status          ENUM (
-        "WAITING_FOR_DOWNLOAD", "DOWNLOADING", "DOWNLOAD_FAILED", 
-        "WAITING_FOR_EXTRACTION", "EXTRACTING", "EXTRACTION_FAILED", 
-        "WAITING_FOR_PARSING", "PARSING", "PARSING_INCOMPLETE_RECIPE",
-        "WAITING_FOR_FOLLOWING", "FOLLOWING", "FOLLOWING_COMPLETE", "FOLLOWING_FAILED"
+        "WAITING_FOR_PROCESSING", "PROCESSING", 
+        "DOWNLOAD_FAILED", "EXTRACTION_FAILED", "PARSING_INCOMPLETE_RECIPE", "FOLLOWING_FAILED", "PROCESSED"
     ) NOT NULL,
     PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS recipe (
     id                 INT NOT NULL AUTO_INCREMENT,
-    page               INT NOT NULL,
+    link               INT NOT NULL,
     title              TEXT,
     description        TEXT,
     date               DATE,
@@ -60,7 +56,7 @@ CREATE TABLE IF NOT EXISTS recipe (
     sugar              FLOAT,
     PRIMARY KEY (id),
     CONSTRAINT UniqueRecipe UNIQUE (title, description),
-    FOREIGN KEY (page) REFERENCES page(id)
+    FOREIGN KEY (link) REFERENCES link(id)
 );
 
 CREATE TABLE IF NOT EXISTS keyword (
@@ -149,22 +145,15 @@ CREATE TABLE IF NOT EXISTS word_statistic (
     search_complete            INT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS page_statistic (
+CREATE TABLE IF NOT EXISTS link_statistic (
     timestamp                 DateTime NOT NULL,
-    waiting_for_download      INT NOT NULL,
-    downloading               INT NOT NULL,
+    waiting_for_processing    INT NOT NULL,
+    processing                INT NOT NULL,
     download_failed           INT NOT NULL,
-    waiting_for_extraction    INT NOT NULL,
-    extracting                INT NOT NULL,
     extraction_failed         INT NOT NULL,
-    waiting_for_parsing       INT NOT NULL,
-    parsing                   INT NOT NULL,
     parsing_incomplete_recipe INT NOT NULL,
-    waiting_for_following     INT NOT NULL,
-    following                 INT NOT NULL,
-    following_complete        INT NOT NULL,
     following_failed          INT NOT NULL,
-    total_content_size        INT NOT NULL
+    total_content_size        BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS recipe_component_statistic (

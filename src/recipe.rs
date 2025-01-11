@@ -10,7 +10,7 @@ struct Id(i32);
 
 #[derive(Debug, Clone)]
 pub struct Recipe {
-    pub page: i32,
+    pub link: i32,
     pub title: Option<String>,
     pub description: Option<String>,
     pub date: Option<NaiveDate>,
@@ -82,10 +82,10 @@ pub async fn add(pool: Pool<MySql>, recipe: Recipe) -> Result<bool, BoxError> {
     }
 
     let recipe_id = query("INSERT INTO recipe (
-page, title, description, date, servings, prep_time_seconds, cook_time_seconds, total_time_seconds, rating, rating_count, 
+link, title, description, date, servings, prep_time_seconds, cook_time_seconds, total_time_seconds, rating, rating_count, 
 calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium, sugar
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(recipe.page)
+        .bind(recipe.link)
         .bind(recipe.title)
         .bind(&recipe.description)
         .bind(recipe.date)

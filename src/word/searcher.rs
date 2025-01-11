@@ -8,7 +8,7 @@ use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
-use crate::{page::{self, PageStatus}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
+use crate::{link::{self, LinkStatus}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
@@ -92,14 +92,14 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
             continue;
         };
 
-        page::add(
+        link::add(
             pool.clone(), 
             &link.link, 
             domain,
             Some(word.id),
             None,
             word.priority, 
-            PageStatus::WaitingForDownload,
+            LinkStatus::WaitingForProcessing,
         ).await?;
     }
 
@@ -122,7 +122,7 @@ pub async fn run(pool: Pool<MySql>, serper_key: String) {
     loop {
         interval.tick().await;
 
-        let current_waiting_for_download = page::pages_with_status(pool.clone(), PageStatus::WaitingForDownload).await;
+        let current_waiting_for_download = link::links_with_status_by_domain(pool.clone(), LinkStatus::WaitingForProcessing).await;
         if let Err(err) = current_waiting_for_download {
             warn!("Error while getting words with status WAITING_FOR_DOWNLOAD: {} (source: {:?})", err, err.source());
             continue;

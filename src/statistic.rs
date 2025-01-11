@@ -4,7 +4,7 @@ use log::{info, warn};
 use sqlx::{query, query_as, FromRow, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{page::PageStatus, word::WordStatus, BoxError};
+use crate::{link::LinkStatus, word::WordStatus, BoxError};
 
 #[derive(FromRow)]
 struct OneBigInt(i64);
@@ -18,7 +18,7 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, B
         .0)
 }
 
-async fn fetch_page_status(pool: Pool<MySql>, word: PageStatus) -> Result<i64, BoxError> {
+async fn fetch_page_status(pool: Pool<MySql>, word: LinkStatus) -> Result<i64, BoxError> {
     Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM page WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
@@ -86,24 +86,17 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
         .map_err(|err| Box::new(err) as BoxError)?;
 
     query("INSERT INTO page_statistic (
-timestamp, waiting_for_download, downloading, download_failed, waiting_for_extraction, extracting, extraction_failed,
-waiting_for_parsing, parsing, parsing_incomplete_recipe, waiting_for_following, following, following_complete, following_failed,
-total_content_size
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+timestamp, waiting_for_processing, processing, download_failed, extraction_failed, 
+parsing_incomplete_recipe, following_failed, processed, total_content_size
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForDownload).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::Downloading).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::DownloadFailed).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForExtraction).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::Extracting).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::ExtractionFailed).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForParsing).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::Parsing).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::ParsingIncompleteRecipe).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::WaitingForFollowing).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::Following).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::FollowingComplete).await?)
-        .bind(fetch_page_status(pool.clone(), PageStatus::FollowingFailed).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::WaitingForProcessing).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::Processing).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::DownloadFailed).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::ExtractionFailed).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::ParsingIncompleteRecipe).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::FollowingFailed).await?)
+        .bind(fetch_page_status(pool.clone(), LinkStatus::Processed).await?)
         .bind(fetch_total_content_size(pool.clone()).await?)
         .execute(&pool)
         .await

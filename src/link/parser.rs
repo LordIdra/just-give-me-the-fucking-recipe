@@ -1,27 +1,11 @@
-use std::{error::Error, fmt, sync::Arc, time::Duration};
+use std::time::Duration;
 
 use chrono::{NaiveDate, NaiveDateTime};
-use log::{info, warn};
 use regex::Regex;
 use serde_json::Value;
-use sqlx::{MySql, Pool};
-use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
-use crate::{page::{self, PageStatus}, recipe::{self, Nutrition, Recipe}, BoxError};
-
-use super::Page;
-
-#[derive(Debug)]
-pub struct PageSchemaNullErr;
-
-impl fmt::Display for PageSchemaNullErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Page schema null; constraint violated somewhere")
-    }
-}
-
-impl Error for PageSchemaNullErr {}
+use crate::recipe::{Nutrition, Recipe};
 
 fn title(v: &Value) -> Option<String> {
     v.get("name")
@@ -359,89 +343,25 @@ fn nutrition(v: &Value) -> Nutrition {
     }
 }
 
-#[tracing::instrument(skip(pool, page), fields(id = page.id))]
-async fn parse(pool: Pool<MySql>, page: Page) -> Result<(), BoxError> {
-    let Some(schema) = page.schema else {
-        return Err(Box::new(PageSchemaNullErr))
-    };
-
-    let v: Value = serde_json::from_str(&schema)
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    let recipe = Recipe {
-        page: page.id,
-        title: title(&v),
-        images: image(&v),
-        authors: authors(&v, page.link.to_owned()),
-        description: description(&v),
-        date: date(&v),
-        servings: servings(&v),
-        prep_time_seconds: prep_time(&v),
-        cook_time_seconds: cook_time(&v),
-        total_time_seconds: total_time(&v).or_else(|| Some(prep_time(&v)? + cook_time(&v)?)),
-        ingredients: ingredients(&v),
-        instructions: instructions(&v),
-        rating: rating(&v),
-        rating_count: rating_count(&v),
-        keywords: keywords(&v),
-        nutrition: nutrition(&v),
-    };
-
-    let is_complete = recipe.is_complete();
-
-    recipe::add(pool.clone(), recipe).await?;
-
-    if is_complete {
-        info!("Parsed complete recipe from {} (page {})", page.link, page.id);
-        page::set_status(pool.clone(), page.id, PageStatus::WaitingForFollowing).await?;
-        page::set_schema(pool, page.id, None).await?;
-    } else {
-        info!("Parsed incomplete recipe from {} (page {})", page.link, page.id);
-        page::set_status(pool.clone(), page.id, PageStatus::ParsingIncompleteRecipe).await?;
-        page::set_content(pool.clone(), page.id, None).await?;
-        page::set_schema(pool, page.id, None).await?;
-    }
-
-    Ok(())
-}
-
-pub async fn run(pool: Pool<MySql>) {
-    info!("Started parser");
-
-    let semaphore = Arc::new(Semaphore::new(256));
-
-    let mut interval = interval(std::time::Duration::from_millis(500));
-
-    loop {
-        if semaphore.available_permits() == 0 {
-            continue;
-        }
-
-        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForParsing, PageStatus::Parsing, semaphore.available_permits()).await;
-        if let Err(err) = next_jobs {
-            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-            continue;
-        }
-
-        for next_job in next_jobs.unwrap() {
-            let sempahore = semaphore.clone();
-            let pool = pool.clone();
-
-            tokio::spawn(async move {
-                let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = parse(pool.clone(), next_job.clone()).await {
-                    warn!("Parser encountered error on page #{} ('{}'): {} (source: {:?})", next_job.id, next_job.link, err, err.source());
-                    if let Err(err) = page::set_status(pool.clone(), next_job.id, PageStatus::ParsingIncompleteRecipe).await {
-                        warn!("Error while setting status to failed on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
-                    }
-                    if let Err(err) = page::set_schema(pool, next_job.id, None).await {
-                        warn!("Error while deleting content on page #{} ('{}')@ {} (source: {:?})", next_job.id, next_job.link, err, err.source());
-                    }
-                }
-            });
-        }
-
-        interval.tick().await;
+#[tracing::instrument(skip(schema))]
+pub async fn parse(id: i32, link: String, schema: Value) -> Recipe {
+    Recipe {
+        link: id,
+        title: title(&schema),
+        images: image(&schema),
+        authors: authors(&schema, link.to_owned()),
+        description: description(&schema),
+        date: date(&schema),
+        servings: servings(&schema),
+        prep_time_seconds: prep_time(&schema),
+        cook_time_seconds: cook_time(&schema),
+        total_time_seconds: total_time(&schema).or_else(|| Some(prep_time(&schema)? + cook_time(&schema)?)),
+        ingredients: ingredients(&schema),
+        instructions: instructions(&schema),
+        rating: rating(&schema),
+        rating_count: rating_count(&schema),
+        keywords: keywords(&schema),
+        nutrition: nutrition(&schema),
     }
 }
 
