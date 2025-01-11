@@ -5,7 +5,6 @@ use log::{info, warn};
 use reqwest::{Certificate, Client, ClientBuilder, Method, Proxy};
 use sqlx::{MySql, Pool};
 use tokio::{sync::{Mutex, Semaphore}, time::{interval, sleep}};
-use url::Url;
 
 use crate::{page::{self, PageStatus}, BoxError};
 
@@ -76,17 +75,9 @@ async fn download_impl(pool: Pool<MySql>, client: Client, page: Page) -> Result<
 
 #[tracing::instrument(skip(pool, client, page), fields(id = page.id))]
 async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), BoxError> {
-    let Some(domain) = Url::parse(&page.link)
-            .map_err(|err| Box::new(err) as BoxError)?
-            .domain() 
-            .map(|v| v.to_owned())
-    else {
-        return Err(Box::new(InvalidDomainErr))
-    };
-
     let semaphore = SEMAPHORES.lock()
         .await
-        .entry(domain.to_owned())
+        .entry(page.domain.to_owned())
         .or_insert(Arc::new(Semaphore::new(1)))
         .clone();
 
@@ -102,6 +93,8 @@ async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), B
     if elapsed_time < REQUEST_INTERVAL_FOR_ONE_SITE {
         sleep(REQUEST_INTERVAL_FOR_ONE_SITE - elapsed_time).await;
     }
+
+    dbg!(semaphore.available_permits());
 
     result
 }
