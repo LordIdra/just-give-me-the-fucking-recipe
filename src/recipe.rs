@@ -109,11 +109,11 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
         .map_err(|err| Box::new(err) as BoxError)?
         .last_insert_id();
 
-    //let tx = pool.begin()
-    //    .await
-    //    .map_err(|err| Box::new(err) as BoxError)?;
-
     for keyword in &recipe.keywords {
+        let tx = pool.begin()
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+        
         let keyword_id = match get_keyword_id(pool.clone(), keyword).await? {
             Some(id) => id,
             None => query("INSERT INTO keyword (keyword) VALUES (?)")
@@ -124,6 +124,10 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
                 .last_insert_id() as i32,
         };
 
+        tx.commit()
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+
         query("INSERT INTO recipe_keyword (recipe, keyword) VALUES (?, ?)")
             .bind(recipe_id)
             .bind(keyword_id)
@@ -132,9 +136,6 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
             .map_err(|err| Box::new(err) as BoxError)?;
     }
 
-    //tx.commit()
-    //    .await
-    //    .map_err(|err| Box::new(err) as BoxError)?;
 
     for author in &recipe.authors {
         let author_id = query("INSERT INTO author (name) VALUES (?)")
@@ -222,7 +223,7 @@ async fn get_keyword_id(pool: Pool<MySql>, keyword: &str) -> Result<Option<i32>,
         .bind(keyword)
         .fetch_optional(&pool)
         .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))
+        .map_err(|err| Box::new(err) as BoxError)
         .map(|v| v.map(|v| v.0))
 }
 

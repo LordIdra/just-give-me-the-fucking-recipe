@@ -228,7 +228,7 @@ async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
         .bind(link)
         .fetch_optional(&pool)
         .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?
+        .map_err(|err| Box::new(err) as BoxError)?
         .is_some())
 }
 
