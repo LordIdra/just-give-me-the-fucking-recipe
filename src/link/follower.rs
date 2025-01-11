@@ -23,7 +23,7 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
             .map(|captures| captures.get(1).unwrap().as_str())
         .filter(|new_link| Url::parse(new_link).is_ok())
         // eg, bruh.com/some-recipe might have links to bruh.com/some-recipe/comments#36
-        .filter(|new_link| !new_link.starts_with(link))
+        .filter(|new_link| !new_link.starts_with(&link))
         .map(|v| v.to_owned())
         .collect()
 }
