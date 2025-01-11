@@ -245,7 +245,7 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
         return;
     }
 
-    trace!("Downloaded {} ({} characters)", link.link, &contents);
+    trace!("Downloaded {} ({} characters)", link.link, &contents.len());
 
     // Extract
     let extract_result = extractor::extract(&contents).await;
