@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Read;
+use std::time::Duration;
 use std::{error::Error, fmt};
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
@@ -89,6 +90,7 @@ async fn main() {
     let pool = MySqlPoolOptions::new()
         .test_before_acquire(true)
         .max_connections(100)
+        .acquire_timeout(Duration::from_secs(2))
         .connect(&args.database_url)
         .await
         .expect("Failed to connect to database");
