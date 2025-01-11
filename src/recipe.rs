@@ -109,13 +109,11 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
         .map_err(|err| Box::new(err) as BoxError)?
         .last_insert_id();
 
-    let tx = pool.begin()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    //let tx = pool.begin()
+    //    .await
+    //    .map_err(|err| Box::new(err) as BoxError)?;
 
     for keyword in &recipe.keywords {
-        
-
         let keyword_id = match get_keyword_id(pool.clone(), keyword).await? {
             Some(id) => id,
             None => query("INSERT INTO keyword (keyword) VALUES (?)")
@@ -134,9 +132,9 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
             .map_err(|err| Box::new(err) as BoxError)?;
     }
 
-    tx.commit()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    //tx.commit()
+    //    .await
+    //    .map_err(|err| Box::new(err) as BoxError)?;
 
     for author in &recipe.authors {
         let author_id = query("INSERT INTO author (name) VALUES (?)")
