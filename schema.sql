@@ -55,7 +55,6 @@ CREATE TABLE IF NOT EXISTS recipe (
     sodium             FLOAT,
     sugar              FLOAT,
     PRIMARY KEY (id),
-    CONSTRAINT UniqueRecipe UNIQUE (title, description),
     FOREIGN KEY (link) REFERENCES link(id)
 );
 
