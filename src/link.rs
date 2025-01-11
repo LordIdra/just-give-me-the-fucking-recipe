@@ -194,7 +194,9 @@ async fn next_jobs(pool: Pool<MySql>, limit: usize) -> Result<Vec<Link>, BoxErro
             if i != 0 {
                 statement += ", ";
             }
+            statement += "\"";
             statement += &domain.to_string();
+            statement += "\"";
         }
         statement += r#")"#;
     }
