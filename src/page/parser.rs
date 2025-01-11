@@ -398,6 +398,7 @@ async fn parse(pool: Pool<MySql>, page: Page) -> Result<(), BoxError> {
     } else {
         info!("Parsed incomplete recipe from {} (page {})", page.link, page.id);
         page::set_status(pool.clone(), page.id, PageStatus::ParsingIncompleteRecipe).await?;
+        page::set_content(pool.clone(), page.id, None).await?;
         page::set_schema(pool, page.id, None).await?;
     }
 

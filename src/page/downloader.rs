@@ -152,6 +152,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
                 .or_insert(Arc::new(Semaphore::new(1)))
                 .clone();
 
+            dbg!(s.available_permits());
             if s.available_permits() == 0 {
                 continue;
             }
