@@ -186,7 +186,7 @@ async fn next_jobs(pool: Pool<MySql>, limit: usize) -> Result<Vec<Link>, BoxErro
         .map(|v| v.domain.clone())
         .collect();
 
-    let links: Vec<Link> = query_as::<_, Link>(&format!(r#"SELECT id, link, domain, content, schema, priority, status 
+    let links: Vec<Link> = query_as::<_, Link>(&format!(r#"SELECT id, link, domain
 FROM link 
 WHERE status = "WAITING_FOR_PROCESSING" 
 GROUP BY domain 

@@ -19,7 +19,7 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, B
 }
 
 async fn fetch_page_status(pool: Pool<MySql>, word: LinkStatus) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM page WHERE status = ?")
+    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM link WHERE status = ?")
         .bind(word.to_string())
         .fetch_one(&pool)
         .await
