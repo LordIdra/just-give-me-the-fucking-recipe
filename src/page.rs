@@ -1,5 +1,8 @@
+use std::{collections::HashMap, sync::{Arc, LazyLock}};
+
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlRow, prelude::FromRow, query, query_as, MySql, Pool, Row};
+use tokio::sync::{Mutex, Semaphore};
 
 use crate::{link_blacklist, BoxError};
 
@@ -240,7 +243,7 @@ async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSt
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let result = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? GROUP BY domain ORDER BY priority DESC LIMIT {limit}"))
+    let result = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? ORDER BY priority DESC LIMIT {limit}"))
         .bind(status_from.to_string())
         .fetch_all(&pool)
         .await
@@ -270,5 +273,57 @@ async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSt
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(result)
+}
+
+#[tracing::instrument(skip(pool, domain_semaphores))]
+#[must_use]
+async fn next_download_jobs(
+    pool: Pool<MySql>, 
+    status_from: PageStatus, 
+    status_to: PageStatus, 
+    limit: usize, 
+    domain_semaphores: &LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>>,
+) -> Result<Vec<Page>, BoxError> {
+    assert!(limit > 0);
+    let tx = pool.begin()
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    let pages_raw = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? GROUP BY domain ORDER BY priority DESC LIMIT {limit}"))
+        .bind(status_from.to_string())
+        .fetch_all(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    let mut pages = vec![];
+    for page in pages_raw {
+        if domain_semaphores.lock().await.get(&page.domain).is_none_or(|semaphore| semaphore.available_permits() > 0) {
+            pages.push(page);
+        }
+    }
+
+    if !pages.is_empty() {
+        let mut statement = "UPDATE page SET status = ? WHERE id IN (".to_string();
+        for (i, page) in pages.iter().enumerate() {
+                        if i != 0 {
+                statement += ", ";
+            }
+            statement += &page.id.to_string();
+        }
+        statement += ")";
+
+        let q = query(&statement)
+            .bind(status_to.to_string());
+
+        q.execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(pages)
 }
 
