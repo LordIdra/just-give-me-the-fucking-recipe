@@ -85,7 +85,7 @@ async fn main() {
     let certificates = Certificate::from_pem_bundle(&buf).unwrap();
     
     let pool = MySqlPoolOptions::new()
-        .max_connections(8)
+        .max_connections(100)
         .connect(&args.database_url)
         .await
         .expect("Failed to connect to database");
