@@ -146,6 +146,10 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             let client = client.clone();
             let pool = pool.clone();
 
+            if SEMAPHORES.lock().await.get(&next_job.domain).is_some_and(|semaphore| semaphore.available_permits() == 0) {
+                continue;
+            }
+
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
                 if let Err(err) = download(pool.clone(), client, next_job.clone()).await {
