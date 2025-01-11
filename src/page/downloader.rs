@@ -81,7 +81,6 @@ async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), B
         .or_insert(Arc::new(Semaphore::new(1)))
         .clone();
 
-    dbg!(semaphore.available_permits());
     let _permit = semaphore.acquire()
         .await
         .unwrap();
@@ -127,7 +126,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             continue;
         }
 
-        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForDownload, PageStatus::Downloading, semaphore.available_permits()).await;
+        let next_jobs = page::next_jobs(pool.clone(), PageStatus::WaitingForDownload, PageStatus::Downloading, 10).await;
         if let Err(err) = next_jobs {
             warn!("Error while getting next job: {} (source: {:?})", err, err.source());
             continue;
