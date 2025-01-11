@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use log::{debug, info, trace, warn};
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
@@ -178,7 +178,7 @@ async fn next_jobs(pool: Pool<MySql>, limit: usize) -> Result<Vec<Link>, BoxErro
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let domains_processing: HashSet<String> = query_as::<_, Domain>(r#"SELECT domain FROM link WHERE status = "PROCESSING" GROUP BY domain"#)
+    let domains_processing: Vec<String> = query_as::<_, Domain>(r#"SELECT domain FROM link WHERE status = "PROCESSING" GROUP BY domain"#)
         .fetch_all(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
@@ -186,12 +186,17 @@ async fn next_jobs(pool: Pool<MySql>, limit: usize) -> Result<Vec<Link>, BoxErro
         .map(|v| v.domain.clone())
         .collect();
 
-    let links: Vec<Link> = query_as::<_, Link>(&format!(r#"SELECT id, link, domain
-FROM link 
-WHERE status = "WAITING_FOR_PROCESSING" 
-GROUP BY domain 
-ORDER BY priority DESC
-LIMIT {limit}"#))
+    let mut statement = r#"SELECT id, link, domain FROM link WHERE status = "WAITING_FOR_PROCESSING" AND domain NOT IN ("#.to_string();
+
+    for (i, domain) in domains_processing.iter().enumerate() {
+        if i != 0 {
+            statement += ", ";
+        }
+        statement += &domain.to_string();
+    }
+    statement += r#") ORDER BY priority DESC LIMIT {limit}"#;
+
+    let links: Vec<Link> = query_as::<_, Link>(&statement)
         .fetch_all(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
