@@ -126,7 +126,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             continue;
         }
 
-        let next_jobs = page::next_download_jobs(pool.clone(), PageStatus::WaitingForDownload, PageStatus::Downloading, 1000, &SEMAPHORES).await;
+        let next_jobs = page::next_download_jobs(pool.clone(), 1000, &SEMAPHORES).await;
         if let Err(err) = next_jobs {
             warn!("Error while getting next job: {} (source: {:?})", err, err.source());
             continue;

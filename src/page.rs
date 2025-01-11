@@ -278,11 +278,7 @@ async fn next_jobs(pool: Pool<MySql>, status_from: PageStatus, status_to: PageSt
 #[tracing::instrument(skip(pool, domain_semaphores))]
 #[must_use]
 async fn next_download_jobs(
-    pool: Pool<MySql>, 
-    status_from: PageStatus, 
-    status_to: PageStatus, 
-    limit: usize, 
-    domain_semaphores: &LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>>,
+    pool: Pool<MySql>, limit: usize, domain_semaphores: &LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>>,
 ) -> Result<Vec<Page>, BoxError> {
     assert!(limit > 0);
     let tx = pool.begin()
@@ -290,7 +286,7 @@ async fn next_download_jobs(
         .map_err(|err| Box::new(err) as BoxError)?;
 
     let pages_raw = query_as::<_, Page>(&format!("SELECT id, link, domain, content, schema, priority, status FROM page WHERE status = ? GROUP BY domain ORDER BY priority DESC LIMIT {limit}"))
-        .bind(status_from.to_string())
+        .bind(PageStatus::WaitingForDownload.to_string())
         .fetch_all(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -313,7 +309,7 @@ async fn next_download_jobs(
         statement += ")";
 
         let q = query(&statement)
-            .bind(status_to.to_string());
+            .bind(PageStatus::Downloading.to_string());
 
         q.execute(&pool)
             .await
