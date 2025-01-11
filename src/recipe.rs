@@ -110,8 +110,12 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
         .last_insert_id();
 
     for keyword in &recipe.keywords {
+        let tx = pool.begin()
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+
         let keyword_id = match get_keyword_id(pool.clone(), keyword).await? {
-            Some(id) => dbg!(id),
+            Some(id) => id,
             None => query("INSERT INTO keyword (keyword) VALUES (?)")
                 .bind(keyword)
                 .execute(&pool)
@@ -124,6 +128,10 @@ calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium
             .bind(recipe_id)
             .bind(keyword_id)
             .execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+
+        tx.commit()
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
     }
