@@ -186,15 +186,19 @@ async fn next_jobs(pool: Pool<MySql>, limit: usize) -> Result<Vec<Link>, BoxErro
         .map(|v| v.domain.clone())
         .collect();
 
-    let mut statement = r#"SELECT id, link, domain FROM link WHERE status = "WAITING_FOR_PROCESSING" AND domain NOT IN ("#.to_string();
+    let mut statement = r#"SELECT id, link, domain FROM link WHERE status = "WAITING_FOR_PROCESSING""#.to_string();
 
-    for (i, domain) in domains_processing.iter().enumerate() {
-        if i != 0 {
-            statement += ", ";
+    if !domains_processing.is_empty() {
+        statement += " AND domain NOT IN (";
+        for (i, domain) in domains_processing.iter().enumerate() {
+            if i != 0 {
+                statement += ", ";
+            }
+            statement += &domain.to_string();
         }
-        statement += &domain.to_string();
+        statement += r#")"#;
     }
-    statement += r#") ORDER BY priority DESC LIMIT {limit}"#;
+    statement += &format!("ORDER BY priority DESC LIMIT {limit}");
 
     let links: Vec<Link> = query_as::<_, Link>(&statement)
         .fetch_all(&pool)
