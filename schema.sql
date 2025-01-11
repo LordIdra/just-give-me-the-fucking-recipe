@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS link_statistic (
     extraction_failed         INT NOT NULL,
     parsing_incomplete_recipe INT NOT NULL,
     following_failed          INT NOT NULL,
+    processed                 INT NOT NULL,
     total_content_size        BIGINT NOT NULL
 );
 
