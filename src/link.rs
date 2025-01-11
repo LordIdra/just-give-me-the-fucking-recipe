@@ -321,8 +321,8 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
     }
     
     let client = builder.build().unwrap();
-    let semaphore = Arc::new(Semaphore::new(512));
-    let mut interval = interval(Duration::from_millis(1000));
+    let semaphore = Arc::new(Semaphore::new(256));
+    let mut interval = interval(Duration::from_millis(2000));
 
     loop {
         interval.tick().await;
