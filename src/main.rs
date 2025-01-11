@@ -4,7 +4,7 @@ use std::{error::Error, fmt};
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
-use log::{info, warn};
+use log::{info, trace, warn};
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
@@ -119,10 +119,10 @@ async fn submit_keyword(State(state): State<AppState>, Json(request): Json<Submi
     match word::add(state.pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
         Ok(was_added) => {
             if was_added {
-                info!("Added new input {}", request.keyword);
+                trace!("Added new input {}", request.keyword);
                 StatusCode::OK
             } else {
-                info!("Rejected duplicate new input {}", request.keyword);
+                trace!("Rejected duplicate new input {}", request.keyword);
                 StatusCode::CONFLICT
             }
         },

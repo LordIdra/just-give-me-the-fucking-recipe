@@ -1,6 +1,6 @@
 use std::{error::Error, fmt, sync::Arc, time::Duration};
 
-use log::{info, warn};
+use log::{info, trace, warn};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -63,15 +63,15 @@ async fn classify(pool: Pool<MySql>, client: Client, openai_key: String, job: Wo
 
     match response.classification.as_str() {
         "specific" => {
-            info!("Classified '{}' as keyword", &job.word);
+            trace!("Classified '{}' as keyword", &job.word);
             word::set_status(pool, job.id, WordStatus::WaitingForSearch).await?;
         }
         "category" => {
-            info!("Classified '{}' as category", &job.word);
+            trace!("Classified '{}' as category", &job.word);
             word::set_status(pool, job.id, WordStatus::WaitingForGeneration).await?
         }
         "neither" => {
-            info!("Classified '{}' as invalid", &job.word);
+            trace!("Classified '{}' as invalid", &job.word);
             word::set_status(pool, job.id, WordStatus::ClassifiedAsInvalid).await?
         }
         _ => {

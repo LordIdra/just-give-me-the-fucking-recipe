@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use axum::http::HeaderMap;
-use log::{info, warn};
+use log::{info, trace, warn};
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
 use sqlx::{MySql, Pool};
@@ -103,7 +103,7 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
         ).await?;
     }
 
-    info!("Searched keyword '{}' and found: {:?}", word.word, link_names);
+    trace!("Searched keyword '{}' and found: {:?}", word.word, link_names);
 
     word::set_status(pool, word.id, word::WordStatus::SearchComplete).await?;
 

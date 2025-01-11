@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use log::{info, warn};
+use log::{info, trace, warn};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -50,9 +50,9 @@ async fn generate(pool: Pool<MySql>, client: Client, openai_key: String, job: Wo
     let response = gpt::query_gpt::<Output>(&client, response_format(), openai_key, input).await?;
     for output in response.output {
         if word::add(pool.clone(), &output, Some(job.id), -1, WordStatus::WaitingForClassification).await? {
-            info!("Added generated word {}", output)
+            trace!("Added generated word {}", output)
         } else {
-            info!("Rejected duplicate generated word {}", output)
+            trace!("Rejected duplicate generated word {}", output)
         }
     }
 
