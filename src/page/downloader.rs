@@ -81,6 +81,7 @@ async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), B
         .or_insert(Arc::new(Semaphore::new(1)))
         .clone();
 
+    dbg!(semaphore.available_permits());
     let _permit = semaphore.acquire()
         .await
         .unwrap();
@@ -93,8 +94,6 @@ async fn download(pool: Pool<MySql>, client: Client, page: Page) -> Result<(), B
     if elapsed_time < REQUEST_INTERVAL_FOR_ONE_SITE {
         sleep(REQUEST_INTERVAL_FOR_ONE_SITE - elapsed_time).await;
     }
-
-    dbg!(semaphore.available_permits());
 
     result
 }
@@ -145,7 +144,6 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
                 .or_insert(Arc::new(Semaphore::new(1)))
                 .clone();
 
-            dbg!(&next_job.domain, s.available_permits());
             if s.available_permits() == 0 {
                 continue;
             }
