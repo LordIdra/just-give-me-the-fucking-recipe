@@ -45,7 +45,7 @@ impl LinkStatus {
     
     pub fn to_string(self) -> &'static str {
         match self {
-            LinkStatus::WaitingForProcessing => "WAITING_FOR_DOWNLOAD",
+            LinkStatus::WaitingForProcessing => "WAITING_FOR_PROCESSING",
             LinkStatus::Processing => "PROCESSING",
             LinkStatus::DownloadFailed => "DOWNLOAD_FAILED",
             LinkStatus::ExtractionFailed => "EXTRACTION_FAILED",
