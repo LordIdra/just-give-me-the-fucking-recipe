@@ -18,7 +18,7 @@ impl Error for FailedToExtractSchema  {}
 
 #[tracing::instrument(skip(contents))]
 pub async fn extract(contents: &str) -> Result<Value, BoxError> {
-    let script_regex = RegexBuilder::new(r"<script[^>]*>(.*?)<\/script>")
+    let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
         .dot_matches_new_line(true)
         .build()
         .unwrap();
