@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, sync::{Arc, LazyLock}, time::{Duration, Instant}};
+use std::{collections::{HashMap, HashSet}, error::Error, fmt, sync::{Arc, LazyLock}, time::{Duration, Instant}};
 
 use axum::http::HeaderMap;
 use log::{info, warn};
@@ -132,6 +132,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             continue;
         }
 
+        let mut seen_domains: HashSet<String> = HashSet::new();
         for next_job in next_jobs.unwrap() {
             let sempahore = semaphore.clone();
             let client = client.clone();
@@ -143,9 +144,11 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
                 .or_insert(Arc::new(Semaphore::new(1)))
                 .clone();
 
-            if s.available_permits() == 0 {
+            if s.available_permits() == 0 || seen_domains.contains(&next_job.domain) {
                 continue;
             }
+
+            seen_domains.insert(next_job.domain.clone());
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
