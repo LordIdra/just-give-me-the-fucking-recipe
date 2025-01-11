@@ -8,7 +8,8 @@ use crate::{BoxError, UnexpectedStatusCodeErr};
 
 use super::Link;
 
-const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(5000);
+const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(4000);
+const ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS: i32 = 4000;
 
 static SEMAPHORES: LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -61,8 +62,9 @@ pub async fn download(client: Client, link: Link) -> Result<String, BoxError> {
         .map_err(|err| Box::new(err) as BoxError)?;
 
     let elapsed_time = Instant::now() - start_time;
-    if elapsed_time < REQUEST_INTERVAL_FOR_ONE_SITE {
-        sleep(REQUEST_INTERVAL_FOR_ONE_SITE - elapsed_time).await;
+    let request_interval = REQUEST_INTERVAL_FOR_ONE_SITE + Duration::from_millis((rand::random::<f64>() * ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS as f64) as u64);
+    if elapsed_time < request_interval {
+        sleep(request_interval - elapsed_time).await;
     }
 
     Ok(content)
