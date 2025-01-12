@@ -253,6 +253,11 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     if let Err(err) = link::set_content_size(pool.clone(), link.id, contents.len() as i32).await {
         warn!("Error while setting content content size for {}: {} (source: {:?})", link.link, err, err.source());
+
+        if let Err(err) = link::set_status(pool.clone(), link.id, LinkStatus::WaitingForProcessing).await {
+            warn!("Error while setting status to WAITING_FOR_PROCESSING for {}: {} (source: {:?})", link.link, err, err.source());
+        }
+
         return;
     }
 
@@ -282,20 +287,29 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     if let Err(err) = recipe::add(pool.clone(), recipe).await {
         warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
+
+        if let Err(err) = link::set_status(pool.clone(), link.id, LinkStatus::WaitingForProcessing).await {
+            warn!("Error while setting status to WAITING_FOR_PROCESSING for {}: {} (source: {:?})", link.link, err, err.source());
+        }
+
         return;
     }
 
     if !is_complete {
+        trace!("Parsed incomplete recipe from {}", link.link);
+
         if let Err(err) = link::set_status(pool.clone(), link.id, LinkStatus::ParsingIncompleteRecipe).await {
             warn!("Error while setting status to PARSING_INCOMPLETE_RECIPE for {}: {} (source: {:?})", link.link, err, err.source());
         }
-        trace!("Parsed incomplete recipe from {}", link.link);
+
         return;
     }
 
     // Set to processing now rather than after following to avoid duplicate recipes appearing
     if let Err(err) = link::set_status(pool.clone(), link.id, LinkStatus::Processed).await {
         warn!("Error while setting status to PROCESSED for {}: {} (source: {:?})", link.link, err, err.source());
+
+        return;
     }
 
     trace!("Parsed complete recipe from {}", link.link);

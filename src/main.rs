@@ -10,8 +10,7 @@ use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
-#[cfg(not(feature = "profiling"))]
-use tracing_subscriber::{Layer, EnvFilter};
+use tracing_subscriber::{EnvFilter, Layer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use word::{classifier, generator, searcher, WordStatus};
 
@@ -63,15 +62,13 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(not(feature = "profiling"))]
+    console_subscriber::init();
     let registry = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
         .with_line_number(true)
         .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")));
 
-    #[cfg(feature = "profiling")]
-    let registry = tracing_subscriber::registry()
-        .with(tracing_tracy::TracyLayer::default());
+    console_subscriber::init();
 
     registry.init();
 
