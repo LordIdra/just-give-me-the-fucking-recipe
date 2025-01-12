@@ -63,14 +63,12 @@ struct AppState {
 #[tokio::main]
 async fn main() {
     console_subscriber::init();
-    let registry = tracing_subscriber::registry()
+    tracing_subscriber::registry()
+        .with(console_subscriber::spawn())
         .with(tracing_subscriber::fmt::layer()
-        .with_line_number(true)
-        .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")));
-
-    console_subscriber::init();
-
-    registry.init();
+            .with_line_number(true)
+            .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")))
+        .init();
 
     info!("Starting...");
 
