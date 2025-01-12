@@ -62,12 +62,18 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    console_subscriber::init();
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_line_number(true)
+        .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace"));
+
+    let console_layer = console_subscriber::ConsoleLayer::builder()
+        .with_default_env()
+        .server_addr(([0, 0, 0, 0], 8999))
+        .spawn();
+
     tracing_subscriber::registry()
-        .with(console_subscriber::spawn())
-        .with(tracing_subscriber::fmt::layer()
-            .with_line_number(true)
-            .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace")))
+        .with(fmt_layer)
+        .with(console_layer)
         .init();
 
     info!("Starting...");
