@@ -272,21 +272,21 @@ async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
         .map_err(|err| Box::new(err) as BoxError)?
         .0;
 
-    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM extraction_failed_link WHERE link = ? LIMIT 1")
+    count += query_as::<_, CountRow>("SELECT count(download_failed_link .id) FROM download_failed_link WHERE link = ? LIMIT 1")
         .bind(link)
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
         .0;
 
-    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processed_link WHERE link = ? LIMIT 1")
+    count += query_as::<_, CountRow>("SELECT count(extraction_failed_link .id) FROM extraction_failed_link WHERE link = ? LIMIT 1")
         .bind(link)
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
         .0;
 
-    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processing_link WHERE link = ? LIMIT 1")
+        count += query_as::<_, CountRow>("SELECT count(processed_link.id) FROM processed_link WHERE link = ? LIMIT 1")
         .bind(link)
         .fetch_one(&pool)
         .await
