@@ -279,6 +279,8 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
+    dbg!("reiojrio");
+
     tx.commit()
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -317,7 +319,7 @@ async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
         .map_err(|err| Box::new(err) as BoxError)?
         .0;
 
-        count += query_as::<_, CountRow>("SELECT count(processed_link.id) FROM processed_link WHERE link = ? LIMIT 1")
+    count += query_as::<_, CountRow>("SELECT count(processed_link.id) FROM processed_link WHERE link = ? LIMIT 1")
         .bind(link)
         .fetch_one(&pool)
         .await

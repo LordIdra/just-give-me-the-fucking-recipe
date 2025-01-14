@@ -50,22 +50,6 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
         .0)
 }
 
-async fn fetch_unique_recipe_ids_in_table(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(DISTINCT recipe.id) FROM recipe JOIN {table} ON recipe.id = {table}.recipe"))
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
-}
-
-async fn fetch_recipes_with_column(pool: Pool<MySql>, column: &str) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM recipe WHERE {column} IS NOT NULL"))
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
-}
-
 #[tracing::instrument(skip(pool))]
 #[must_use]
 async fn update(pool: Pool<MySql>) -> Result<(), BoxError> {
@@ -106,44 +90,11 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    query("INSERT INTO recipe_component_statistic (
-timestamp, recipe_count, keyword_count, author_count, image_count, ingredient_count, instruction_count
-) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    query("INSERT INTO recipe_statistic (
+timestamp, recipe_count
+) VALUES (?, ?)")
         .bind(timestamp)
         .bind(fetch_count(pool.clone(), "recipe").await?)
-        .bind(fetch_count(pool.clone(), "keyword").await?)
-        .bind(fetch_count(pool.clone(), "author").await?)
-        .bind(fetch_count(pool.clone(), "image").await?)
-        .bind(fetch_count(pool.clone(), "ingredient").await?)
-        .bind(fetch_count(pool.clone(), "instruction").await?)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    query("INSERT INTO recipe_statistic (
-timestamp, with_title, with_description, with_date,
-with_rating, with_rating_count, with_prep_time_seconds, with_cook_time_seconds, with_total_time_seconds, with_servings, 
-with_calories, with_carbohydrates, with_cholesterol, with_fat, with_fiber, with_protein, with_saturated_fat, with_sodium, with_sugar
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp)
-        .bind(fetch_recipes_with_column(pool.clone(), "title").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "description").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "date").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "rating").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "rating_count").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "prep_time_seconds").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "cook_time_seconds").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "total_time_seconds").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "servings").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "calories").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "carbohydrates").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "cholesterol").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "fat").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "fiber").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "protein").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "saturated_fat").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "sodium").await?)
-        .bind(fetch_recipes_with_column(pool.clone(), "sugar").await?)
         .execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;

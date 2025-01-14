@@ -179,28 +179,6 @@ CREATE TABLE IF NOT EXISTS link_statistic (
 
 CREATE TABLE IF NOT EXISTS recipe_statistic (
     timestamp               DateTime NOT NULL,
-    with_keywords           INT NOT NULL,
-    with_authors            INT NOT NULL,
-    with_images             INT NOT NULL,
-    with_ingredients        INT NOT NULL,
-    with_instructions       INT NOT NULL,
-    with_title              INT NOT NULL,
-    with_description        INT NOT NULL,
-    with_date               INT NOT NULL,
-    with_rating             INT NOT NULL,
-    with_rating_count       INT NOT NULL,
-    with_prep_time_seconds  INT NOT NULL,
-    with_cook_time_seconds  INT NOT NULL,
-    with_total_time_seconds INT NOT NULL,
-    with_servings           INT NOT NULL,
-    with_calories           INT NOT NULL,
-    with_carbohydrates      INT NOT NULL,
-    with_cholesterol        INT NOT NULL,
-    with_fat                INT NOT NULL,
-    with_fiber              INT NOT NULL,
-    with_protein            INT NOT NULL,
-    with_saturated_fat      INT NOT NULL,
-    with_sodium             INT NOT NULL,
-    with_sugar              INT NOT NULL
+    recipe_count            INT NOT NULL,
 );
 
