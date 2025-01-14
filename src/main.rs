@@ -66,14 +66,8 @@ async fn main() {
         .with_line_number(true)
         .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace"));
 
-    let console_layer = console_subscriber::ConsoleLayer::builder()
-        .with_default_env()
-        .server_addr(([0, 0, 0, 0], 8999))
-        .spawn();
-
     tracing_subscriber::registry()
         .with(fmt_layer)
-        .with(console_layer)
         .init();
 
     info!("Starting...");
@@ -90,7 +84,7 @@ async fn main() {
     
     let pool = MySqlPoolOptions::new()
         .test_before_acquire(true)
-        .max_connections(100)
+        .max_connections(10)
         .acquire_timeout(Duration::from_secs(2))
         .connect(&args.database_url)
         .await

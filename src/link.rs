@@ -360,7 +360,6 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     let schema = extract_result.unwrap();
 
-
     trace!("Extracted schema from {}", link.link);
 
     // Parse
