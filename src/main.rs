@@ -84,7 +84,7 @@ async fn main() {
     
     let pool = MySqlPoolOptions::new()
         .test_before_acquire(true)
-        .max_connections(10)
+        .max_connections(200)
         .acquire_timeout(Duration::from_secs(2))
         .connect(&args.database_url)
         .await
