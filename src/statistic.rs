@@ -27,11 +27,19 @@ pub async fn fetch_table_count(pool: Pool<MySql>, table : &str) -> Result<i64, B
 }
 
 async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>("SELECT CAST((SUM(extraction_failed_link.content_size) + SUM(processed_link.content_size)) AS INT) FROM extraction_failed_link, processed_link")
+    let mut count = query_as::<_, OneBigInt>("SELECT CAST(SUM(extraction_failed_link.content_size) AS INT) FROM extraction_failed_link")
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
-        .0)
+        .0;
+
+    count += query_as::<_, OneBigInt>("SELECT CAST(SUM(processed_link.content_size) AS INT) FROM processed_link")
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0;
+
+    count
 }
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
