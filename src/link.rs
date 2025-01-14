@@ -75,12 +75,10 @@ pub async fn reset_tasks(pool: Pool<MySql>) -> Result<(), BoxError> {
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn add_waiting(pool: Pool<MySql>, link: &str, domain: &str, priority: i32) -> Result<bool, BoxError> {
-    dbg!(1);
+    dbg!(link, exists(pool.clone(), link).await?);
     if exists(pool.clone(), link).await? || !link_blacklist::is_allowed(&pool, link).await? {
         return Ok(false);
     }
-
-    dbg!(link);
 
     query("INSERT INTO waiting_link (link, domain, priority) VALUES (?, ?, ?)")
         .bind(link)
