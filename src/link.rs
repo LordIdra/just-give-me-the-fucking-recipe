@@ -126,7 +126,6 @@ pub async fn set_waiting(pool: Pool<MySql>, id: i32) -> Result<Option<Link>, Box
 
     if let Some(link) = &link {
         query("INSERT INTO waiting_link (link, domain, priority) VALUES (?, ?, ?)")
-            .bind(link.id)
             .bind(link.link.clone())
             .bind(link.domain.clone())
             .bind(link.priority)
@@ -163,7 +162,6 @@ pub async fn set_download_failed(pool: Pool<MySql>, id: i32) -> Result<Option<Li
 
     if let Some(link) = &link {
         query("INSERT INTO download_failed_link (link) VALUES (?)")
-            .bind(link.id)
             .bind(link.link.clone())
             .execute(&pool)
             .await
@@ -198,7 +196,6 @@ pub async fn set_extraction_failed(pool: Pool<MySql>, id: i32, content_size: i32
 
     if let Some(link) = &link {
         query("INSERT INTO extraction_failed_link (link, content_size) VALUES (?, ?)")
-            .bind(link.id)
             .bind(link.link.clone())
             .bind(content_size)
             .execute(&pool)
