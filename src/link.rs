@@ -282,6 +282,8 @@ pub async fn set_processed(pool: Pool<MySql>, processing_id: i32, content_size: 
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
+    dbg!(processing_link.link, processed_id);
+
     Ok(processed_id)
 }
 
