@@ -357,19 +357,21 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     let is_complete = recipe.is_complete();
 
-    if let Err(err) = recipe::add(pool.clone(), recipe).await {
-        warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
-
-        if let Err(err) = set_waiting(pool.clone(), link.id).await {
-            warn!("Error while setting link to waiting {}: {} (source: {:?})", link.link, err, err.source());
-        }
+    // Set to processing now rather than after following to avoid duplicate recipes appearing
+    let processed_result = set_processed(pool.clone(), link.id, contents.len() as i32).await;
+    if let Err(err) = processed_result {
+        warn!("Error while setting status to PROCESSED for {}: {} (source: {:?})", link.link, err, err.source());
 
         return;
     }
+    let id = processed_result.unwrap();
 
-    // Set to processing now rather than after following to avoid duplicate recipes appearing
-    if let Err(err) = set_processed(pool.clone(), link.id, contents.len() as i32).await {
-        warn!("Error while setting status to PROCESSED for {}: {} (source: {:?})", link.link, err, err.source());
+    if let Err(err) = recipe::add(pool.clone(), recipe).await {
+        warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
+
+        if let Err(err) = set_waiting(pool.clone(), id).await {
+            warn!("Error while setting link to waiting {}: {} (source: {:?})", link.link, err, err.source());
+        }
 
         return;
     }
