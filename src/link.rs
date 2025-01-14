@@ -13,6 +13,9 @@ pub mod extractor;
 pub mod follower;
 pub mod parser;
 
+#[derive(Debug, Clone, FromRow)]
+pub struct CountRow(i32);
+
 #[derive(Debug, Clone)]
 pub struct Link {
     pub id: i32,
@@ -255,12 +258,42 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
 #[tracing::instrument(skip(pool))]
 #[must_use]
 async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
-    Ok(query("SELECT id FROM link WHERE link = ? LIMIT 1")
+    let mut count = query_as::<_, CountRow>("SELECT count(waiting_link.id) FROM waiting_link WHERE link = ? LIMIT 1")
         .bind(link)
-        .fetch_optional(&pool)
+        .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
-        .is_some())
+        .0;
+
+    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processing_link WHERE link = ? LIMIT 1")
+        .bind(link)
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0;
+
+    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM extraction_failed_link WHERE link = ? LIMIT 1")
+        .bind(link)
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0;
+
+    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processed_link WHERE link = ? LIMIT 1")
+        .bind(link)
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0;
+
+    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processing_link WHERE link = ? LIMIT 1")
+        .bind(link)
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0;
+
+    Ok(count > 0)
 }
 
 #[tracing::instrument(skip(pool, client, semaphore))]
