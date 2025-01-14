@@ -6,7 +6,7 @@ use tokio::{sync::{Mutex, Semaphore}, time::sleep};
 
 use crate::{BoxError, UnexpectedStatusCodeErr};
 
-use super::Link;
+use super::ProcessingLink;
 
 const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(4000);
 const ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS: i32 = 4000;
@@ -34,7 +34,7 @@ pub fn headers() -> HeaderMap {
 }
 
 #[tracing::instrument(skip(client, link), fields(id = link.id))]
-pub async fn download(client: Client, link: Link) -> Result<String, BoxError> {
+pub async fn download(client: Client, link: ProcessingLink) -> Result<String, BoxError> {
     let semaphore = SEMAPHORES.lock()
         .await
         .entry(link.domain.to_owned())
