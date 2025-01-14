@@ -39,7 +39,7 @@ async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
         .map_err(|err| Box::new(err) as BoxError)?
         .0;
 
-    count
+    Ok(count)
 }
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
