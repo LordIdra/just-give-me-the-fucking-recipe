@@ -265,7 +265,7 @@ pub async fn set_processed(pool: Pool<MySql>, processing_id: i32, content_size: 
     };
 
     let processed_id = query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
-        .bind(processing_link.id)
+        .bind(processing_link.link)
         .bind(content_size)
         .execute(&pool)
         .await
@@ -281,8 +281,6 @@ pub async fn set_processed(pool: Pool<MySql>, processing_id: i32, content_size: 
     tx.commit()
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
-
-    dbg!(processing_link.link, processed_id);
 
     Ok(processed_id)
 }
