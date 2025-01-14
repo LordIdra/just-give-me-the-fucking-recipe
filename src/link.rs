@@ -75,7 +75,6 @@ pub async fn reset_tasks(pool: Pool<MySql>) -> Result<(), BoxError> {
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn add_waiting(pool: Pool<MySql>, link: &str, domain: &str, priority: i32) -> Result<bool, BoxError> {
-    dbg!(link, exists(pool.clone(), link).await?);
     if exists(pool.clone(), link).await? || !link_blacklist::is_allowed(&pool, link).await? {
         return Ok(false);
     }
@@ -275,7 +274,7 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
 
     query("DELETE FROM processing_link WHERE id = ?")
         .bind(link.id)
-        .execute(&pool)
+       .execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
