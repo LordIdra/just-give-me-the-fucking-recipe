@@ -89,7 +89,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
 ) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
         .bind(fetch_table_count(pool.clone(), "waiting_link").await?)
-        .bind(fetch_table_count(pool.clone(), "procesing_link").await?)
+        .bind(fetch_table_count(pool.clone(), "processing_link").await?)
         .bind(fetch_table_count(pool.clone(), "download_failed_link").await?)
         .bind(fetch_table_count(pool.clone(), "extraction_failed_link").await?)
         .bind(fetch_table_count(pool.clone(), "processed_link").await?)

@@ -93,7 +93,7 @@ pub async fn poll_next_job(pool: Pool<MySql>) -> Result<Option<Link>, BoxError> 
             .bind(link.id)
             .bind(link.link.clone())
             .bind(link.domain.clone())
-            .bind(link.priority.clone())
+            .bind(link.priority)
             .execute(&pool)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
@@ -130,7 +130,7 @@ pub async fn set_waiting(pool: Pool<MySql>, id: i32) -> Result<Option<Link>, Box
             .bind(link.id)
             .bind(link.link.clone())
             .bind(link.domain.clone())
-            .bind(link.priority.clone())
+            .bind(link.priority)
             .execute(&pool)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
@@ -198,7 +198,7 @@ pub async fn set_extraction_failed(pool: Pool<MySql>, id: i32, content_size: i32
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO extraction_failed_link (id, link, content_size) VALUES (?, ?)")
+        query("INSERT INTO extraction_failed_link (id, link, content_size) VALUES (?, ?, ?)")
             .bind(link.id)
             .bind(link.link.clone())
             .bind(content_size)
