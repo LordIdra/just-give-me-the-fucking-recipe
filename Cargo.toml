@@ -22,9 +22,7 @@ dateparser = "0.2.1"
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
-[profile.dev]
+[profile.profiling]
+inherits = "release"
 debug = true
-opt-level = 3
 
-[profile.release]
-debug = true
