@@ -25,6 +25,3 @@ console-subscriber = "0.4.1"
 
 [profile.dev]
 opt-level = 3
-
-[build]
-rustflags = ["--cfg", "tokio_unstable"]
