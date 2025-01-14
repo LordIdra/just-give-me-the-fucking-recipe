@@ -89,8 +89,7 @@ pub async fn poll_next_job(pool: Pool<MySql>) -> Result<Option<Link>, BoxError> 
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO processing_link (id, link, domain, priority) VALUES (?, ?, ?, ?)")
-            .bind(link.id)
+        query("INSERT INTO processing_link (link, domain, priority) VALUES (?, ?, ?)")
             .bind(link.link.clone())
             .bind(link.domain.clone())
             .bind(link.priority)
@@ -126,7 +125,7 @@ pub async fn set_waiting(pool: Pool<MySql>, id: i32) -> Result<Option<Link>, Box
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO waiting_link (id, link, domain, priority) VALUES (?, ?, ?, ?)")
+        query("INSERT INTO waiting_link (link, domain, priority) VALUES (?, ?, ?)")
             .bind(link.id)
             .bind(link.link.clone())
             .bind(link.domain.clone())
@@ -163,7 +162,7 @@ pub async fn set_download_failed(pool: Pool<MySql>, id: i32) -> Result<Option<Li
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO download_failed_link (id, link) VALUES (?, ?)")
+        query("INSERT INTO download_failed_link (link) VALUES (?)")
             .bind(link.id)
             .bind(link.link.clone())
             .execute(&pool)
@@ -198,7 +197,7 @@ pub async fn set_extraction_failed(pool: Pool<MySql>, id: i32, content_size: i32
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO extraction_failed_link (id, link, content_size) VALUES (?, ?, ?)")
+        query("INSERT INTO extraction_failed_link (link, content_size) VALUES (?, ?)")
             .bind(link.id)
             .bind(link.link.clone())
             .bind(content_size)
@@ -234,7 +233,7 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
         .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(link) = &link {
-        query("INSERT INTO processed_link (id, link, content_size) VALUES (?, ?)")
+        query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
             .bind(link.id)
             .bind(link.link.clone())
             .bind(content_size)
