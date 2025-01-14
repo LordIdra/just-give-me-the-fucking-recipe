@@ -13,23 +13,44 @@ CREATE TABLE IF NOT EXISTS word (
 );
 
 CREATE TABLE IF NOT EXISTS link_blacklist (
-    id       INT NOT NULL AUTO_INCREMENT,
-    word     TEXT NOT NULL UNIQUE,
+    id   INT NOT NULL AUTO_INCREMENT,
+    word TEXT NOT NULL UNIQUE,
     PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS link (
-    id              INT NOT NULL AUTO_INCREMENT,
-    link            TEXT NOT NULL,
-    domain          TEXT NOT NULL,
-    word_source     INT,
-    follower_source INT,
-    content_size    INT,
-    priority        INT NOT NULL,
-    status          ENUM (
-        "WAITING_FOR_PROCESSING", "PROCESSING", 
-        "DOWNLOAD_FAILED", "EXTRACTION_FAILED", "PARSING_INCOMPLETE_RECIPE", "FOLLOWING_FAILED", "PROCESSED"
-    ) NOT NULL,
+CREATE TABLE IF NOT EXISTS waiting_link (
+    id       INT NOT NULL AUTO_INCREMENT,
+    link     TEXT NOT NULL,
+    domain   TEXT NOT NULL,
+    priority INT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS processing_link (
+    id       INT NOT NULL AUTO_INCREMENT,
+    link     TEXT NOT NULL,
+    domain   TEXT NOT NULL,
+    priority INT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS download_failed_link (
+    id   INT NOT NULL AUTO_INCREMENT,
+    link TEXT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS extraction_failed_link (
+    id           INT NOT NULL AUTO_INCREMENT,
+    link         TEXT NOT NULL,
+    content_size INT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS processed_link (
+    id           INT NOT NULL AUTO_INCREMENT,
+    link         TEXT NOT NULL,
+    content_size INT NOT NULL,
     PRIMARY KEY (id)
 );
 

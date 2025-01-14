@@ -4,7 +4,7 @@ use log::{info, warn};
 use sqlx::{query, query_as, FromRow, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{link::LinkStatus, word::WordStatus, BoxError};
+use crate::{word::WordStatus, BoxError};
 
 #[derive(FromRow)]
 struct OneBigInt(i64);
@@ -18,9 +18,8 @@ async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, B
         .0)
 }
 
-async fn fetch_link_status(pool: Pool<MySql>, word: LinkStatus) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM link WHERE status = ?")
-        .bind(word.to_string())
+pub async fn fetch_table_count(pool: Pool<MySql>, table : &str) -> Result<i64, BoxError> {
+    Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM {}", table))
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
@@ -28,7 +27,7 @@ async fn fetch_link_status(pool: Pool<MySql>, word: LinkStatus) -> Result<i64, B
 }
 
 async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>("SELECT CAST(SUM(content_size) AS INT) FROM link")
+    Ok(query_as::<_, OneBigInt>("SELECT CAST((SUM(link.content_size) AS INT) FROM link")
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
@@ -86,17 +85,14 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
         .map_err(|err| Box::new(err) as BoxError)?;
 
     query("INSERT INTO link_statistic (
-timestamp, waiting_for_processing, processing, download_failed, extraction_failed, 
-parsing_incomplete_recipe, following_failed, processed, total_content_size
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+timestamp, waiting_for_processing, processing, download_failed, extraction_failed, processed, total_content_size
+) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::WaitingForProcessing).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::Processing).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::DownloadFailed).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::ExtractionFailed).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::ParsingIncompleteRecipe).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::FollowingFailed).await?)
-        .bind(fetch_link_status(pool.clone(), LinkStatus::Processed).await?)
+        .bind(fetch_table_count(pool.clone(), "waiting_link").await?)
+        .bind(fetch_table_count(pool.clone(), "procesing_link").await?)
+        .bind(fetch_table_count(pool.clone(), "download_failed_link").await?)
+        .bind(fetch_table_count(pool.clone(), "extraction_failed_link").await?)
+        .bind(fetch_table_count(pool.clone(), "processed_link").await?)
         .bind(fetch_total_content_size(pool.clone()).await?)
         .execute(&pool)
         .await

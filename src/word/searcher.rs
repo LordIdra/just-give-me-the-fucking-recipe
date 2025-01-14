@@ -8,11 +8,11 @@ use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
-use crate::{link::{self, LinkStatus}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
+use crate::{link::{self}, statistic, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
-const MIN_WAITING_FOR_PROCESSING: i32 = 100;
+const MIN_WAITING_FOR_PROCESSING: i64 = 100;
 
 #[derive(Debug, Serialize)]
 struct SerperRequest {
@@ -92,15 +92,7 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
             continue;
         };
 
-        link::add(
-            pool.clone(), 
-            &link.link, 
-            domain,
-            Some(word.id),
-            None,
-            word.priority, 
-            LinkStatus::WaitingForProcessing,
-        ).await?;
+        link::add_waiting(pool.clone(), &link.link, domain, word.priority).await?;
     }
 
     trace!("Searched keyword '{}' and found: {:?}", word.word, link_names);
@@ -122,7 +114,7 @@ pub async fn run(pool: Pool<MySql>, serper_key: String) {
     loop {
         interval.tick().await;
 
-        let current_waiting_for_processing = link::links_with_status_by_domain(pool.clone(), LinkStatus::WaitingForProcessing).await;
+        let current_waiting_for_processing = statistic::fetch_table_count(pool.clone(), "waiting_link").await;
         if let Err(err) = current_waiting_for_processing {
             warn!("Error while getting words with status WAITING_FOR_PROCESSING: {} (source: {:?})", err, err.source());
             continue;
