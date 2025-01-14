@@ -121,16 +121,11 @@ timestamp, recipe_count, keyword_count, author_count, image_count, ingredient_co
         .map_err(|err| Box::new(err) as BoxError)?;
 
     query("INSERT INTO recipe_statistic (
-timestamp, with_keywords, with_authors, with_images, with_ingredients, with_instructions, with_title, with_description, with_date,
+timestamp, with_title, with_description, with_date,
 with_rating, with_rating_count, with_prep_time_seconds, with_cook_time_seconds, with_total_time_seconds, with_servings, 
 with_calories, with_carbohydrates, with_cholesterol, with_fat, with_fiber, with_protein, with_saturated_fat, with_sodium, with_sugar
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_keyword").await?)
-        .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_author").await?)
-        .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_image").await?)
-        .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_ingredient").await?)
-        .bind(fetch_unique_recipe_ids_in_table(pool.clone(), "recipe_instruction").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "title").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "description").await?)
         .bind(fetch_recipes_with_column(pool.clone(), "date").await?)

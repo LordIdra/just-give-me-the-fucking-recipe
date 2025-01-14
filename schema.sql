@@ -177,16 +177,6 @@ CREATE TABLE IF NOT EXISTS link_statistic (
     total_content_size        BIGINT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS recipe_component_statistic (
-    timestamp         DateTime NOT NULL,
-    recipe_count      INT NOT NULL,
-    keyword_count     INT NOT NULL,
-    author_count      INT NOT NULL,
-    image_count       INT NOT NULL,
-    ingredient_count  INT NOT NULL,
-    instruction_count INT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS recipe_statistic (
     timestamp               DateTime NOT NULL,
     with_keywords           INT NOT NULL,
