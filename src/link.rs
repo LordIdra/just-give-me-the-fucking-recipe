@@ -266,7 +266,6 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
 
     let processed_id = query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
         .bind(link.id)
-        .bind(link.link.clone())
         .bind(content_size)
         .execute(&pool)
         .await
