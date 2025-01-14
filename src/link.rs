@@ -18,7 +18,7 @@ pub struct Link {
     pub id: i32,
     pub link: String,
     pub domain: String,
-    pub priority: String,
+    pub priority: i32,
 }
 
 impl FromRow<'_, MySqlRow> for Link {
