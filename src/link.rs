@@ -423,17 +423,17 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
     }
     
     let client = builder.build().unwrap();
-    let semaphore = Arc::new(Semaphore::new(8));
+    let semaphore = Arc::new(Semaphore::new(512));
     let mut interval = interval(Duration::from_millis(2000));
 
     loop {
         interval.tick().await;
 
-        if semaphore.available_permits() == 0 {
-            continue;
-        }
-
         loop {
+            if semaphore.available_permits() == 0 {
+                continue;
+            }
+
             let link_result = poll_next_job(pool.clone()).await;
             if let Err(err) = link_result {
                 warn!("Error while getting next job: {} (source: {:?})", err, err.source());
