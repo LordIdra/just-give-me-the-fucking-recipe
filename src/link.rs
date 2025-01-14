@@ -97,17 +97,24 @@ pub async fn poll_next_job(pool: Pool<MySql>) -> Result<Option<ProcessingLink>, 
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let link = query_as::<_, ProcessingLink>("SELECT waiting_link.id, waiting_link.link, waiting_link.domain, waiting_link.priority FROM waiting_link LEFT JOIN processing_link ON waiting_link.domain = processing_link.domain WHERE processing_link.domain IS NULL LIMIT 1")
+    let waiting_link = query_as::<_, ProcessingLink>("SELECT waiting_link.id, waiting_link.link, waiting_link.domain, waiting_link.priority FROM waiting_link LEFT JOIN processing_link ON waiting_link.domain = processing_link.domain WHERE processing_link.domain IS NULL LIMIT 1")
         .fetch_optional(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    if let Some(link) = &link {
-        query("INSERT INTO processing_link (link, domain, priority) VALUES (?, ?, ?)")
-            .bind(link.link.clone())
-            .bind(link.domain.clone())
-            .bind(link.priority)
+    let link = if let Some(waiting_link) = &waiting_link {
+        let processing_id = query("INSERT INTO processing_link (link, domain, priority) VALUES (?, ?, ?)")
+            .bind(waiting_link.link.clone())
+            .bind(waiting_link.domain.clone())
+            .bind(waiting_link.priority)
             .execute(&pool)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?
+            .last_insert_id();
+
+        let link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
+            .bind(processing_id)
+            .fetch_one(&pool)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -116,7 +123,11 @@ pub async fn poll_next_job(pool: Pool<MySql>) -> Result<Option<ProcessingLink>, 
             .execute(&pool)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
-    }
+
+        Some(link)
+    } else {
+        None
+    };
 
     tx.commit()
         .await
@@ -253,13 +264,14 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
         return Err(Box::new(ProcessingLinkNotFound));
     };
 
-    query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
+    let processed_id = query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
         .bind(link.id)
         .bind(link.link.clone())
         .bind(content_size)
         .execute(&pool)
         .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .map_err(|err| Box::new(err) as BoxError)?
+        .last_insert_id() as i32;
 
     query("DELETE FROM processing_link WHERE id = ?")
         .bind(link.id)
@@ -271,7 +283,7 @@ pub async fn set_processed(pool: Pool<MySql>, id: i32, content_size: i32) -> Res
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(id)
+    Ok(processed_id)
 }
 
 #[tracing::instrument(skip(pool))]
