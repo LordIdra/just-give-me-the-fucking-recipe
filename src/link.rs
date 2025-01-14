@@ -429,12 +429,9 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
     loop {
         interval.tick().await;
         
-        dbg!(1);
-
         loop {
-            dbg!(2);
             if semaphore.available_permits() == 0 {
-                continue;
+                break;
             }
 
             let link_result = poll_next_job(pool.clone()).await;
