@@ -43,6 +43,10 @@ impl Recipe {
             && !self.keywords.is_empty()
             && self.nutrition.is_complete()
     }
+
+    pub fn should_add(&self) -> bool {
+        !self.ingredients.is_empty()
+    }
 }
 
 #[derive(Debug, Default, Clone)]

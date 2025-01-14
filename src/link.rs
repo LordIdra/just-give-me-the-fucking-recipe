@@ -376,10 +376,12 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
     let recipe = parser::parse(id, link.link.clone(), schema).await;
     let is_complete = recipe.is_complete();
 
-    if let Err(err) = recipe::add(pool.clone(), recipe).await {
-        warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
+    if recipe.title.is_some() {
+        if let Err(err) = recipe::add(pool.clone(), recipe).await {
+            warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
 
-        return;
+            return;
+        }
     }
 
     if !is_complete {
