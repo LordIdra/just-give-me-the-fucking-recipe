@@ -107,7 +107,7 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
 
 pub async fn waiting_domains_count(pool: Pool<MySql>) -> Result<i64, BoxError> {
     // REALLY SLOW QUERY
-    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM waiting_link GROUP BY domain")
+    Ok(query_as::<_, OneBigInt>("SELECT COUNT(DISTINCT domain) FROM waiting_link")
         .fetch_one(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?
