@@ -4,15 +4,18 @@ use axum::http::HeaderMap;
 use log::{info, trace, warn};
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
-use sqlx::{MySql, Pool};
+use sqlx::{query_as, FromRow, MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
-use crate::{link::{self}, statistic, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
+use crate::{link::{self}, word::{self, Word, WordStatus}, BoxError, UnexpectedStatusCodeErr};
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
-const MIN_WAITING_FOR_PROCESSING: i64 = 100;
+const MIN_WAITING_FOR_PROCESSING: i64 = 200;
+
+#[derive(FromRow)]
+struct OneBigInt(i64);
 
 #[derive(Debug, Serialize)]
 struct SerperRequest {
@@ -102,6 +105,15 @@ async fn search(pool: Pool<MySql>, client: Client, serper_key: String, word: Wor
     Ok(())
 }
 
+pub async fn waiting_domains_count(pool: Pool<MySql>) -> Result<i64, BoxError> {
+    // REALLY SLOW QUERY
+    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM waiting_link GROUP BY domain")
+        .fetch_one(&pool)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?
+        .0)
+}
+
 pub async fn run(pool: Pool<MySql>, serper_key: String) {
     info!("Started searcher");
 
@@ -109,18 +121,18 @@ pub async fn run(pool: Pool<MySql>, serper_key: String) {
 
     let semaphore = Arc::new(Semaphore::new(1));
 
-    let mut interval = interval(Duration::from_millis(500));
+    let mut interval = interval(Duration::from_millis(60000));
 
     loop {
         interval.tick().await;
 
-        let current_waiting_for_processing = statistic::fetch_table_count(pool.clone(), "waiting_link").await;
-        if let Err(err) = current_waiting_for_processing {
+        let current_domains_waiting_for_processing = waiting_domains_count(pool.clone()).await;
+        if let Err(err) = current_domains_waiting_for_processing {
             warn!("Error while getting words with status WAITING_FOR_PROCESSING: {} (source: {:?})", err, err.source());
             continue;
         }
 
-        if current_waiting_for_processing.unwrap() >= MIN_WAITING_FOR_PROCESSING {
+        if current_domains_waiting_for_processing.unwrap() >= MIN_WAITING_FOR_PROCESSING {
             continue;
         }
 
