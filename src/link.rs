@@ -75,7 +75,7 @@ fn key_link_domain() -> String {
 }
 
 fn key_link_content_size() -> String {
-    "link:domain".to_string()
+    "link:content_size".to_string()
 }
 
 #[tracing::instrument(skip(pool))]
