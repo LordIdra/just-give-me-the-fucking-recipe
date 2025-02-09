@@ -152,20 +152,20 @@ pub async fn set_content_size(mut redis_pool: MultiplexedConnection, link: &str,
     Ok(())
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn links_with_status(mut pool: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
-    let count: usize = pool.zcard(key_status_links(status))
+pub async fn links_with_status(mut redis_pool: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
+    let count: usize = redis_pool.zcard(key_status_links(status))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(count)
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn total_content_size(mut pool: MultiplexedConnection) -> Result<usize, BoxError> {
-    let sizes: Vec<usize> = pool.hvals(key_link_content_size())
+pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result<usize, BoxError> {
+    let sizes: Vec<usize> = redis_pool.hvals(key_link_content_size())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -175,7 +175,7 @@ pub async fn total_content_size(mut pool: MultiplexedConnection) -> Result<usize
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
 pub async fn poll_next_job(mut redis_pool: MultiplexedConnection) -> Result<Option<String>, BoxError> {
-    let links: Vec<String> = redis_pool.zmpop_max(key_status_links(LinkStatus::Waiting), 1)
+    let links: Vec<String> = redis_pool.zpopmax(key_status_links(LinkStatus::Waiting), 1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -183,12 +183,10 @@ pub async fn poll_next_job(mut redis_pool: MultiplexedConnection) -> Result<Opti
         return Ok(None)
     };
 
-    let link = link.clone();
-
-    update_status(redis_pool.clone(), &link, LinkStatus::Processing)
+    update_status(redis_pool.clone(), link, LinkStatus::Processing)
         .await?;
 
-    Ok(Some(link))
+    Ok(Some(link.to_string()))
 }
 
 #[tracing::instrument(skip(redis_pool))]

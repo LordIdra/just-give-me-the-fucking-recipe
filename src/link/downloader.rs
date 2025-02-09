@@ -32,9 +32,9 @@ pub fn headers() -> HeaderMap {
     headers
 }
 
-#[tracing::instrument(skip(client))]
-pub async fn download(pool: MultiplexedConnection, client: Client, job: String) -> Result<String, BoxError> {
-    let domain = link::get_domain(pool.clone(), &job)
+#[tracing::instrument(skip(redis_pool, client))]
+pub async fn download(redis_pool: MultiplexedConnection, client: Client, job: String) -> Result<String, BoxError> {
+    let domain = link::get_domain(redis_pool.clone(), &job)
         .await?;
 
     let semaphore = SEMAPHORES.lock()

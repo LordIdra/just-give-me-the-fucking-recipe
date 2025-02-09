@@ -198,9 +198,8 @@ pub async fn next_job(mut pool: MultiplexedConnection, status_from: WordStatus, 
         return Ok(None);
     };
 
-    let _: () = pool.hset(key_word_status(), word, status_to.to_string())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    update_status(pool.clone(), word, status_to)
+        .await?;
 
     Ok(Some(word.to_string()))
 }
