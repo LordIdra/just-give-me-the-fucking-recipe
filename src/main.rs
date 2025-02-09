@@ -6,6 +6,7 @@ use std::{error::Error, fmt};
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
 use log::{info, trace, warn};
+use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
@@ -57,7 +58,8 @@ struct Args {
 
 #[derive(Debug, Clone)]
 struct AppState {
-    pool: Pool<MySql>,
+    sql_pool: Pool<MySql>,
+    redis_pool: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -82,7 +84,7 @@ async fn main() {
 
     let certificates = Certificate::from_pem_bundle(&buf).unwrap();
     
-    let pool = MySqlPoolOptions::new()
+    let sql_pool = MySqlPoolOptions::new()
         .test_before_acquire(true)
         .max_connections(200)
         .acquire_timeout(Duration::from_secs(2))
@@ -90,17 +92,24 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    word::reset_tasks(pool.clone()).await.expect("Failed to reset word tasks");
-    link::reset_tasks(pool.clone()).await.expect("Failed to reset link tasks");
+    let redis_pool = redis::Client::open("redis://127.0.0.1/")
+        .unwrap()
+        .get_multiplexed_tokio_connection()
+        .await
+        .unwrap();
 
-    tokio::spawn(classifier::run(pool.clone(), args.openai_key.clone()));
-    tokio::spawn(generator::run(pool.clone(), args.openai_key));
-    tokio::spawn(searcher::run(pool.clone(), args.serper_key));
-    tokio::spawn(link::run(pool.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(pool.clone()));
+    word::reset_tasks(redis_pool.clone()).await.expect("Failed to reset word tasks");
+    link::reset_tasks(sql_pool.clone()).await.expect("Failed to reset link tasks");
+
+    tokio::spawn(classifier::run(redis_pool.clone(), args.openai_key.clone()));
+    tokio::spawn(generator::run(redis_pool.clone(), args.openai_key));
+    tokio::spawn(searcher::run(sql_pool.clone(), redis_pool.clone(), args.serper_key));
+    tokio::spawn(link::run(sql_pool.clone(), args.proxy, certificates));
+    tokio::spawn(statistic::run(sql_pool.clone()));
 
     let state = AppState {
-        pool,
+        sql_pool,
+        redis_pool,
     };
     
     let app = Router::new()
@@ -114,7 +123,7 @@ async fn main() {
 
 #[tracing::instrument]
 async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
-    match word::add(state.pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
+    match word::add(state.redis_pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
         Ok(was_added) => {
             if was_added {
                 trace!("Added new input {}", request.keyword);

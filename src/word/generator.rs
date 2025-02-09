@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use log::{info, trace, warn};
+use redis::aio::MultiplexedConnection;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -9,9 +10,7 @@ use tokio::{sync::Semaphore, time::interval};
 
 use crate::{gpt, word::{self, WordStatus}, BoxError};
 
-use super::Word;
-
-const MIN_WAITING_FOR_SEARCH: i32 = 10;
+const MIN_WAITING_FOR_SEARCH: usize = 10;
 
 fn response_format() -> serde_json::Value {
     json!({
@@ -44,24 +43,24 @@ struct Output {
 }
 
 #[tracing::instrument(skip(pool, client, openai_key))]
-async fn generate(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
-    let input = format!("List as many foods as you possibly can in the food category: {:?}. Just output the name of each food without extra detail.", job.word);
+async fn generate(pool: MultiplexedConnection, client: Client, openai_key: String, job: &str) -> Result<(), BoxError> {
+    let input = format!("List as many foods as you possibly can in the food category: {:?}. Just output the name of each food without extra detail.", job);
 
     let response = gpt::query_gpt::<Output>(&client, response_format(), openai_key, input).await?;
     for output in response.output {
-        if word::add(pool.clone(), &output, Some(job.id), -1, WordStatus::WaitingForClassification).await? {
+        if word::add(pool.clone(), &output, Some(job), -1, WordStatus::WaitingForClassification).await? {
             trace!("Added generated word {}", output)
         } else {
             trace!("Rejected duplicate generated word {}", output)
         }
     }
 
-    word::set_status(pool.clone(), job.id, WordStatus::GenerationComplete).await?;
+    word::update_status(pool.clone(), job, WordStatus::GenerationComplete).await?;
 
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>, openai_key: String) {
+pub async fn run(pool: MultiplexedConnection, openai_key: String) {
     info!("Started generator");
 
     let client = Client::new();
@@ -94,7 +93,7 @@ pub async fn run(pool: Pool<MySql>, openai_key: String) {
                 break;
             }
 
-            let Some(state) = next_job.unwrap() else {
+            let Some(next_job) = next_job.unwrap() else {
                 break;
             };
             
@@ -105,10 +104,10 @@ pub async fn run(pool: Pool<MySql>, openai_key: String) {
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = generate(pool.clone(), client, openai_key.clone(), state.clone()).await {
-                    warn!("Generator encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
-                    if let Err(err) = word::set_status(pool, state.id, WordStatus::GenerationFailed).await {
-                        warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());
+                if let Err(err) = generate(pool.clone(), client, openai_key.clone(), &next_job).await {
+                    warn!("Generator encountered error on word '{}': {} (source: {:?})", next_job, err, err.source());
+                    if let Err(err) = word::update_status(pool, &next_job, WordStatus::GenerationFailed).await {
+                        warn!("Error while setting status to failed on word '{}': {} (source: {:?})", &next_job, err, err.source());
                     }
                 }
             });

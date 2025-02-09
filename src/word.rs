@@ -1,14 +1,11 @@
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, mysql::MySqlRow, prelude::FromRow, query, query_as, MySql, Pool};
 
 use crate::BoxError;
 
 pub mod classifier;
 pub mod generator;
 pub mod searcher;
-
-#[derive(FromRow)]
-struct CountRow(i32);
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 pub enum WordStatus {
@@ -27,103 +24,89 @@ pub enum WordStatus {
 }
 
 impl WordStatus {
-    pub fn from_string(x: &str) -> Option<Self> {
-        match x {
-            "WAITING_FOR_GENERATION" => Some(WordStatus::WaitingForGeneration),
-            "GENERATING" => Some(WordStatus::Generating),
-            "GENERATION_FAILED" => Some(WordStatus::GenerationFailed),
-            "GENERATION_COMPLETE" => Some(WordStatus::GenerationComplete),
-            "WAITING_FOR_CLASSIFICATION" => Some(WordStatus::WaitingForClassification),
-            "CLASSIFYING" => Some(WordStatus::Classifying),
-            "CLASSIFICATION_FAILED" => Some(WordStatus::ClassificationFailed),
-            "CLASSIFIED_AS_INVALID" => Some(WordStatus::ClassifiedAsInvalid),
-            "WAITING_FOR_SEARCH" => Some(WordStatus::WaitingForSearch),
-            "SEARCHING" => Some(WordStatus::Searching),
-            "SEARCH_FAILED" => Some(WordStatus::SearchFailed),
-            "SEARCH_COMPLETE" => Some(WordStatus::SearchComplete),
-            _ => None,
-        }
-    }
-    
     pub fn to_string(self) -> &'static str {
         match self {
-            WordStatus::WaitingForGeneration => "WAITING_FOR_GENERATION",
-            WordStatus::Generating => "GENERATING",
-            WordStatus::GenerationFailed => "GENERATION_FAILED",
-            WordStatus::GenerationComplete => "GENERATION_COMPLETE",
-            WordStatus::WaitingForClassification => "WAITING_FOR_CLASSIFICATION",
-            WordStatus::Classifying => "CLASSIFYING",
-            WordStatus::ClassificationFailed => "CLASSIFICATION_FAILED",
-            WordStatus::ClassifiedAsInvalid => "CLASSIFIED_AS_INVALID",
-            WordStatus::WaitingForSearch => "WAITING_FOR_SEARCH",
-            WordStatus::Searching => "SEARCHING",
-            WordStatus::SearchFailed => "SEARCH_FAILED",
-            WordStatus::SearchComplete => "SEARCH_COMPLETE",
+            WordStatus::WaitingForGeneration => "waiting_for_generation",
+            WordStatus::Generating => "generating",
+            WordStatus::GenerationFailed => "generation_failed",
+            WordStatus::GenerationComplete => "generation_complete",
+            WordStatus::WaitingForClassification => "waiting_for_classification",
+            WordStatus::Classifying => "classifying",
+            WordStatus::ClassificationFailed => "classification_failed",
+            WordStatus::ClassifiedAsInvalid => "classified_as_invalid",
+            WordStatus::WaitingForSearch => "waiting_for_search",
+            WordStatus::Searching => "searching",
+            WordStatus::SearchFailed => "search_failed",
+            WordStatus::SearchComplete => "search_complete",
         }
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Word {
-    pub id: i32,
-    pub word: String,
-    pub parent: Option<i32>,
-    pub priority: i32,
-    pub status: WordStatus,
+fn key_status_words(status: WordStatus) -> String {
+    format!("word:words_by_status:{}", status.to_string())
 }
 
-impl FromRow<'_, MySqlRow> for Word {
-    #[tracing::instrument(skip(row))]
-    fn from_row(row: &'_ MySqlRow) -> Result<Self, sqlx::Error> {
-        Ok(Self {
-            id: row.try_get("id")?,
-            word: row.try_get("word")?,
-            parent: row.try_get("parent")?,
-            priority: row.try_get("priority")?,
-            status: WordStatus::from_string(row.try_get("status")?).expect("Invalid status"),
-        })
-    }
+fn key_word_status(word: &str) -> String {
+    format!("word:{}:status", word)
+}
+
+fn key_word_parent(word: &str) -> String {
+    format!("word:{}:parent", word)
+}
+
+fn key_word_priority(word: &str) -> String {
+    format!("word:{}:priority", word)
 }
 
 /// Returns true if word added
 /// Returns false if word already existed
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(pool: Pool<MySql>, word: &str, parent: Option<i32>, priority: i32, status: WordStatus) -> Result<bool, BoxError> {
-    if exists(&pool, word).await? {
+pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: i32, status: WordStatus) -> Result<bool, BoxError> {
+    let mut pipe = redis::pipe();
+    pipe.zadd(key_status_words(status), priority, word.to_string());
+    pipe.set(key_word_status(word), status.to_string());
+    pipe.set(key_word_priority(word), priority);
+
+    if let Some(parent) = parent {
+        pipe.set(key_word_parent(word), parent.to_string());
+    }
+        
+    if exists(pool.clone(), word).await? {
         return Ok(false);
     }
 
-    query("INSERT INTO word (word, parent, priority, status) VALUES (?, ?, ?, ?)")
-        .bind(word.to_string())
-        .bind(parent)
-        .bind(priority)
-        .bind(status.to_string())
-        .execute(&pool)
+    pipe.exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
-   
+
     Ok(true)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn words_with_status(pool: Pool<MySql>, status: WordStatus) -> Result<i32, BoxError> {
-    Ok(query_as::<_, CountRow>("SELECT count(id) FROM word WHERE status = ?")
-        .bind(status.to_string())
-        .fetch_one(&pool)
+pub async fn get_priority(mut pool: MultiplexedConnection, word: &str) -> Result<i32, BoxError> {
+    let count: i32 = pool.get(key_word_priority(word))
         .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(count)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn set_status(pool: Pool<MySql>, id: i32, status: WordStatus) -> Result<(), BoxError> {
-    query("UPDATE word SET status = ? WHERE id = ?")
-        .bind(status.to_string())
-        .bind(id)
-        .execute(&pool)
+pub async fn words_with_status(mut pool: MultiplexedConnection, status: WordStatus) -> Result<usize, BoxError> {
+    let count: usize = pool.zcard(key_status_words(status))
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(count)
+}
+
+#[tracing::instrument(skip(pool))]
+#[must_use]
+pub async fn update_status(mut pool: MultiplexedConnection, word: &str, status: WordStatus) -> Result<(), BoxError> {
+    let _: () = pool.set(key_word_status(word), status.to_string())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     
@@ -132,63 +115,56 @@ pub async fn set_status(pool: Pool<MySql>, id: i32, status: WordStatus) -> Resul
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn reset_tasks(pool: Pool<MySql>) -> Result<(), BoxError> {
-    query("UPDATE word SET status = 'WAITING_FOR_GENERATION' WHERE status = 'GENERATING'")
-        .execute(&pool)
+pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError> {
+    let generating: Vec<String> = pool.zrange(key_status_words(WordStatus::Generating), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
+    for word in generating {
+        update_status(pool.clone(), &word, WordStatus::WaitingForGeneration);
+    }
 
-    query("UPDATE word SET status = 'WAITING_FOR_CLASSIFICATION' WHERE status = 'CLASSIFYING'")
-        .execute(&pool)
+    let classifying: Vec<String> = pool.zrange(key_status_words(WordStatus::Classifying), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
+    for word in classifying {
+        update_status(pool.clone(), &word, WordStatus::Classifying);
+    }
 
-    query("UPDATE word SET status = 'WAITING_FOR_SEARCH' WHERE status = 'SEARCHING'")
-        .execute(&pool)
+    let searching: Vec<String> = pool.zrange(key_status_words(WordStatus::Searching), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
+    for word in searching {
+        update_status(pool.clone(), &word, WordStatus::WaitingForSearch);
+    }
 
     Ok(())
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn exists(pool: &Pool<MySql>, word: &str) -> Result<bool, BoxError> {
-    Ok(query("SELECT id FROM word WHERE word = ? LIMIT 1")
-        .bind(word)
-        .fetch_optional(pool)
+async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, BoxError> {
+    let exists: bool = pool.exists(key_word_status(word))
         .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .is_some())
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(exists)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn next_job(pool: Pool<MySql>, status_from: WordStatus, status_to: WordStatus) -> Result<Option<Word>, BoxError> {
-    let tx = pool.begin()
+pub async fn next_job(mut pool: MultiplexedConnection, status_from: WordStatus, status_to: WordStatus) -> Result<Option<String>, BoxError> {
+    let word: Option<String> = pool.zpopmax(key_status_words(status_from), 1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(result) = query_as::<_, Word>("SELECT id, word, parent, priority, status FROM word WHERE status = ? ORDER BY priority DESC LIMIT 1")
-            .bind(status_from.to_string())
-            .fetch_optional(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-    else {
+    let Some(word) = word else {
         return Ok(None);
     };
 
-    query("UPDATE word SET status = ? WHERE id = ?")
-        .bind(status_to.to_string())
-        .bind(result.id)
-        .execute(&pool)
+    let _: () = pool.set(key_word_status(&word), status_to.to_string())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    tx.commit()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(Some(result))
+    Ok(Some(word))
 }
 

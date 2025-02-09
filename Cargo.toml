@@ -10,6 +10,7 @@ axum = { version = "0.7.9", features = ["macros"] }
 reqwest = { version = "0.12.10", features = ["json", "hickory-dns"] }
 serde = { version = "1.0.216", features = ["derive"] }
 sqlx = { version = "0.8.3", features = ["mysql", "runtime-tokio", "chrono"] }
+redis = { version = "0.28.2", features = ["tokio-comp"] }
 serde_json = "1.0.134"
 log = "0.4.22"
 regex = "1.11.1"

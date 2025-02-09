@@ -441,6 +441,7 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
             }
 
             let Some(link) = link_result.unwrap() else {
+                dbg!("nop");
                 break;
             };
 

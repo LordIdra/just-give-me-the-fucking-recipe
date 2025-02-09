@@ -1,17 +1,15 @@
 use std::{error::Error, fmt, sync::Arc, time::Duration};
 
 use log::{info, trace, warn};
+use redis::aio::MultiplexedConnection;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 
 use crate::{gpt, word::{self, WordStatus}, BoxError};
 
-use super::Word;
-
-const MIN_WAITING_FOR_SEARCH: i32 = 20;
+const MIN_WAITING_FOR_SEARCH: usize = 20;
 
 #[derive(Debug)]
 pub struct InvalidClassificationErr(String);
@@ -57,22 +55,22 @@ struct Classification {
 }
 
 #[tracing::instrument(skip(pool, client, openai_key))]
-async fn classify(pool: Pool<MySql>, client: Client, openai_key: String, job: Word) -> Result<(), BoxError> {
-    let input = format!("Is this a specific food, a category of foods, or neither? {}", job.word);
+async fn classify(pool: MultiplexedConnection, client: Client, openai_key: String, job: &str) -> Result<(), BoxError> {
+    let input = format!("Is this a specific food, a category of foods, or neither? {}", job);
     let response = gpt::query_gpt::<Classification>(&client, response_format(), openai_key, input).await?;
 
     match response.classification.as_str() {
         "specific" => {
-            trace!("Classified '{}' as keyword", &job.word);
-            word::set_status(pool, job.id, WordStatus::WaitingForSearch).await?;
+            trace!("Classified '{}' as keyword", &job);
+            word::update_status(pool, job, WordStatus::WaitingForSearch).await?;
         }
         "category" => {
-            trace!("Classified '{}' as category", &job.word);
-            word::set_status(pool, job.id, WordStatus::WaitingForGeneration).await?
+            trace!("Classified '{}' as category", &job);
+            word::update_status(pool, job, WordStatus::WaitingForGeneration).await?
         }
         "neither" => {
-            trace!("Classified '{}' as invalid", &job.word);
-            word::set_status(pool, job.id, WordStatus::ClassifiedAsInvalid).await?
+            trace!("Classified '{}' as invalid", &job);
+            word::update_status(pool, job, WordStatus::ClassifiedAsInvalid).await?
         }
         _ => {
             // Response is bounded so this should never happen
@@ -83,7 +81,7 @@ async fn classify(pool: Pool<MySql>, client: Client, openai_key: String, job: Wo
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>, openai_key: String) {
+pub async fn run(pool: MultiplexedConnection, openai_key: String) {
     info!("Started classifier");
 
     let client = Client::new();
@@ -117,7 +115,7 @@ pub async fn run(pool: Pool<MySql>, openai_key: String) {
                 break;
             }
 
-            let Some(state) = next_job.unwrap() else {
+            let Some(next_job) = next_job.unwrap() else {
                 break;
             };
             
@@ -128,10 +126,10 @@ pub async fn run(pool: Pool<MySql>, openai_key: String) {
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = classify(pool.clone(), client, openai_key, state.clone()).await {
-                    warn!("Classifier encountered error on word #{} ('{}'): {} (source: {:?})", state.id, state.word, err, err.source());
-                    if let Err(err) = word::set_status(pool, state.id, WordStatus::ClassificationFailed).await {
-                        warn!("Error while setting status to failed on word #{} ('{}')@ {} (source: {:?})", state.id, state.word, err, err.source());
+                if let Err(err) = classify(pool.clone(), client, openai_key, &next_job).await {
+                    warn!("Classifier encountered error on word '{}': {} (source: {:?})", next_job, err, err.source());
+                    if let Err(err) = word::update_status(pool, &next_job, WordStatus::ClassificationFailed).await {
+                        warn!("Error while setting status to failed on word '{}': {} (source: {:?})", next_job, err, err.source());
                     }
                 }
             });
