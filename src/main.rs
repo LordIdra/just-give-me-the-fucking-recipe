@@ -103,9 +103,9 @@ async fn main() {
 
     tokio::spawn(classifier::run(redis_pool.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(redis_pool.clone(), args.openai_key));
-    tokio::spawn(searcher::run(sql_pool.clone(), redis_pool.clone(), args.serper_key));
-    tokio::spawn(link::run(sql_pool.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(sql_pool.clone()));
+    //tokio::spawn(searcher::run(sql_pool.clone(), redis_pool.clone(), args.serper_key));
+    //tokio::spawn(link::run(sql_pool.clone(), args.proxy, certificates));
+    //tokio::spawn(statistic::run(sql_pool.clone()));
 
     let state = AppState {
         sql_pool,

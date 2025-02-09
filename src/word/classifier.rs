@@ -9,7 +9,7 @@ use tokio::{sync::Semaphore, time::interval};
 
 use crate::{gpt, word::{self, WordStatus}, BoxError};
 
-const MIN_WAITING_FOR_SEARCH: usize = 20;
+const MIN_WAITING_FOR_SEARCH: usize = 50;
 
 #[derive(Debug)]
 pub struct InvalidClassificationErr(String);
