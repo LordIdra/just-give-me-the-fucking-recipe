@@ -120,21 +120,21 @@ pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     for word in generating {
-        update_status(pool.clone(), &word, WordStatus::WaitingForGeneration);
+        update_status(pool.clone(), &word, WordStatus::WaitingForGeneration).await?;
     }
 
     let classifying: Vec<String> = pool.zrange(key_status_words(WordStatus::Classifying), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     for word in classifying {
-        update_status(pool.clone(), &word, WordStatus::Classifying);
+        update_status(pool.clone(), &word, WordStatus::Classifying).await?;
     }
 
     let searching: Vec<String> = pool.zrange(key_status_words(WordStatus::Searching), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     for word in searching {
-        update_status(pool.clone(), &word, WordStatus::WaitingForSearch);
+        update_status(pool.clone(), &word, WordStatus::WaitingForSearch).await?;
     }
 
     Ok(())
@@ -153,13 +153,15 @@ async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, Box
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn next_job(mut pool: MultiplexedConnection, status_from: WordStatus, status_to: WordStatus) -> Result<Option<String>, BoxError> {
-    let word: Option<String> = pool.zpopmax(key_status_words(status_from), 1)
+    let word: Option<[String; 1]> = pool.zpopmax(key_status_words(status_from), 1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     let Some(word) = word else {
         return Ok(None);
     };
+
+    let word = word[0].clone();
 
     let _: () = pool.set(key_word_status(&word), status_to.to_string())
         .await

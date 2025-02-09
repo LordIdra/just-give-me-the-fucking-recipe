@@ -5,7 +5,6 @@ use redis::aio::MultiplexedConnection;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 
 use crate::{gpt, word::{self, WordStatus}, BoxError};
