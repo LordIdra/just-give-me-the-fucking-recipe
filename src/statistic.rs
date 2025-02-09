@@ -1,46 +1,14 @@
 use std::time::Duration;
 
 use log::{info, warn};
+use redis::aio::MultiplexedConnection;
 use sqlx::{query, query_as, FromRow, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{word::WordStatus, BoxError};
+use crate::{link::{self, LinkStatus}, word::{self, WordStatus}, BoxError};
 
 #[derive(FromRow)]
 struct OneBigInt(i64);
-
-async fn fetch_word_status(pool: Pool<MySql>, word: WordStatus) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>("SELECT COUNT(*) FROM word WHERE status = ?")
-        .bind(word.to_string())
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
-}
-
-pub async fn fetch_table_count(pool: Pool<MySql>, table : &str) -> Result<i64, BoxError> {
-    Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM {}", table))
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
-}
-
-async fn fetch_total_content_size(pool: Pool<MySql>) -> Result<i64, BoxError> {
-    let mut count = query_as::<_, OneBigInt>("SELECT CAST(SUM(extraction_failed_link.content_size) AS INT) FROM extraction_failed_link")
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    count += query_as::<_, OneBigInt>("SELECT CAST(SUM(processed_link.content_size) AS INT) FROM processed_link")
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    Ok(count)
-}
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
     Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM {table}"))
@@ -52,7 +20,7 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn update(pool: Pool<MySql>) -> Result<(), BoxError> {
+async fn update(redis_pool: MultiplexedConnection, pool: Pool<MySql>) -> Result<(), BoxError> {
     let timestamp = chrono::offset::Utc::now();
 
     query("INSERT INTO word_statistic (
@@ -60,18 +28,18 @@ timestamp, waiting_for_generation, generating, generation_failed, generation_com
 classifying, classification_failed, classified_as_invalid, waiting_for_search, searching, search_failed, search_complete
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(fetch_word_status(pool.clone(), WordStatus::WaitingForGeneration).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::Generating).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::GenerationFailed).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::GenerationComplete).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::WaitingForClassification).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::Classifying).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::ClassificationFailed).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::ClassifiedAsInvalid).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::WaitingForSearch).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::Searching).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::SearchFailed).await?)
-        .bind(fetch_word_status(pool.clone(), WordStatus::SearchComplete).await?)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::WaitingForGeneration).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::Generating).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::GenerationFailed).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::GenerationComplete).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::WaitingForClassification).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::Classifying).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::ClassificationFailed).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::ClassifiedAsInvalid).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::WaitingForSearch).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::Searching).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::SearchFailed).await? as i32)
+        .bind(word::words_with_status(redis_pool.clone(), WordStatus::SearchComplete).await? as i32)
         .execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -80,12 +48,12 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
 timestamp, waiting_for_processing, processing, download_failed, extraction_failed, processed, total_content_size
 ) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(fetch_table_count(pool.clone(), "waiting_link").await?)
-        .bind(fetch_table_count(pool.clone(), "processing_link").await?)
-        .bind(fetch_table_count(pool.clone(), "download_failed_link").await?)
-        .bind(fetch_table_count(pool.clone(), "extraction_failed_link").await?)
-        .bind(fetch_table_count(pool.clone(), "processed_link").await?)
-        .bind(fetch_total_content_size(pool.clone()).await?)
+        .bind(link::links_with_status(redis_pool.clone(), LinkStatus::Waiting).await? as i32)
+        .bind(link::links_with_status(redis_pool.clone(), LinkStatus::Processing).await? as i32)
+        .bind(link::links_with_status(redis_pool.clone(), LinkStatus::DownloadFailed).await? as i32)
+        .bind(link::links_with_status(redis_pool.clone(), LinkStatus::ExtractionFailed).await? as i32)
+        .bind(link::links_with_status(redis_pool.clone(), LinkStatus::Processed).await? as i32)
+        .bind(link::total_content_size(redis_pool.clone()).await? as i32)
         .execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -104,7 +72,7 @@ timestamp, recipe_count
     Ok(())
 }
 
-pub async fn run(pool: Pool<MySql>) {
+pub async fn run(redis_pool: MultiplexedConnection, pool: Pool<MySql>) {
     info!("Started statistic updater");
 
     let mut interval = interval(Duration::from_secs(30));
@@ -112,7 +80,7 @@ pub async fn run(pool: Pool<MySql>) {
     loop {
         interval.tick().await;
 
-        if let Err(err) = update(pool.clone()).await {
+        if let Err(err) = update(redis_pool.clone(), pool.clone()).await {
             warn!("Error while updating statistics: {} (source: {:?})", err, err.source());
         }
     }

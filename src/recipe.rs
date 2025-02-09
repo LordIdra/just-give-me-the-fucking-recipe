@@ -10,7 +10,7 @@ struct Id(i32);
 
 #[derive(Debug, Clone)]
 pub struct Recipe {
-    pub link: i32,
+    pub link: String,
     pub title: Option<String>,
     pub description: Option<String>,
     pub date: Option<NaiveDate>,

@@ -1,12 +1,11 @@
 use std::{collections::HashMap, sync::{Arc, LazyLock}, time::{Duration, Instant}};
 
 use axum::http::HeaderMap;
+use redis::aio::MultiplexedConnection;
 use reqwest::{Client, Method};
 use tokio::{sync::{Mutex, Semaphore}, time::sleep};
 
-use crate::{BoxError, UnexpectedStatusCodeErr};
-
-use super::ProcessingLink;
+use crate::{link, BoxError, UnexpectedStatusCodeErr};
 
 const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(4000);
 const ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS: i32 = 4000;
@@ -33,11 +32,14 @@ pub fn headers() -> HeaderMap {
     headers
 }
 
-#[tracing::instrument(skip(client, link), fields(id = link.id))]
-pub async fn download(client: Client, link: ProcessingLink) -> Result<String, BoxError> {
+#[tracing::instrument(skip(client))]
+pub async fn download(pool: MultiplexedConnection, client: Client, job: String) -> Result<String, BoxError> {
+    let domain = link::get_domain(pool.clone(), &job)
+        .await?;
+
     let semaphore = SEMAPHORES.lock()
         .await
-        .entry(link.domain.to_owned())
+        .entry(domain)
         .or_insert(Arc::new(Semaphore::new(1)))
         .clone();
 
@@ -47,7 +49,7 @@ pub async fn download(client: Client, link: ProcessingLink) -> Result<String, Bo
 
     let start_time = Instant::now();
 
-    let response = client.request(Method::GET, link.link.clone())
+    let response = client.request(Method::GET, job)
         .headers(headers())
         .send()
         .await
@@ -69,5 +71,4 @@ pub async fn download(client: Client, link: ProcessingLink) -> Result<String, Bo
 
     Ok(content)
 }
-
 

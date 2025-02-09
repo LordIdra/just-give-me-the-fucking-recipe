@@ -344,9 +344,9 @@ fn nutrition(v: &Value) -> Nutrition {
 }
 
 #[tracing::instrument(skip(schema))]
-pub async fn parse(id: i32, link: String, schema: Value) -> Recipe {
+pub async fn parse(link: String, schema: Value) -> Recipe {
     Recipe {
-        link: id,
+        link: link.clone(),
         title: title(&schema),
         images: image(&schema),
         authors: authors(&schema, link.to_owned()),

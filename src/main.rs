@@ -58,6 +58,7 @@ struct Args {
 
 #[derive(Debug, Clone)]
 struct AppState {
+    #[allow(unused)]
     sql_pool: Pool<MySql>,
     redis_pool: MultiplexedConnection,
 }
@@ -99,13 +100,13 @@ async fn main() {
         .unwrap();
 
     word::reset_tasks(redis_pool.clone()).await.expect("Failed to reset word tasks");
-    link::reset_tasks(sql_pool.clone()).await.expect("Failed to reset link tasks");
+    link::reset_tasks(redis_pool.clone()).await.expect("Failed to reset link tasks");
 
     tokio::spawn(classifier::run(redis_pool.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(redis_pool.clone(), args.openai_key));
-    //tokio::spawn(searcher::run(sql_pool.clone(), redis_pool.clone(), args.serper_key));
-    //tokio::spawn(link::run(sql_pool.clone(), args.proxy, certificates));
-    //tokio::spawn(statistic::run(sql_pool.clone()));
+    tokio::spawn(searcher::run(sql_pool.clone(), redis_pool.clone(), args.serper_key));
+    tokio::spawn(link::run(sql_pool.clone(), redis_pool.clone(), args.proxy, certificates));
+    tokio::spawn(statistic::run(redis_pool.clone(), sql_pool.clone()));
 
     let state = AppState {
         sql_pool,

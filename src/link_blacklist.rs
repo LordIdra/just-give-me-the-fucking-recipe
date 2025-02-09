@@ -1,22 +1,21 @@
-use sqlx::{prelude::FromRow, query, query_as, MySql, Pool};
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 
 use crate::BoxError;
 
-#[derive(FromRow)]
-struct BlacklistWord(String);
+fn key_blacklist() -> String {
+    "blacklist".to_string()
+}
 
 /// Returns true if added
 /// Returns false if already existed
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(pool: Pool<MySql>, word: &str) -> Result<bool, BoxError> {
-    if exists(&pool, word).await? {
+pub async fn add(mut pool: MultiplexedConnection, word: &str) -> Result<bool, BoxError> {
+    if exists(pool.clone(), word).await? {
         return Ok(false);
     }
 
-    query("INSERT INTO link_blacklist (word) VALUES (?)")
-        .bind(word.to_string())
-        .execute(&pool)
+    let _: () = pool.sadd(key_blacklist(), word)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
    
@@ -25,25 +24,23 @@ pub async fn add(pool: Pool<MySql>, word: &str) -> Result<bool, BoxError> {
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn exists(pool: &Pool<MySql>, word: &str) -> Result<bool, BoxError> {
-    Ok(query("SELECT id FROM link_blacklist WHERE word = ? LIMIT 1")
-        .bind(word)
-        .fetch_optional(pool)
+async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, BoxError> {
+    let exists: bool = pool.sismember(key_blacklist(), word)
         .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .is_some())
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(exists)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn is_allowed(pool: &Pool<MySql>, link: &str) -> Result<bool, BoxError> {
-    let blacklist = query_as::<_, BlacklistWord>("SELECT word FROM link_blacklist")
-        .fetch_all(pool)
+pub async fn is_allowed(mut pool: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
+    let blacklist: Vec<String> = pool.smembers(key_blacklist())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     for word in blacklist {
-        if link.contains(&word.0) {
+        if link.contains(&word) {
             return Ok(false);
         }
     }

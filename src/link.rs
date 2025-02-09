@@ -1,8 +1,10 @@
 use std::{error::Error, fmt, sync::Arc, time::Duration};
 
 use log::{debug, info, trace, warn};
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
-use sqlx::{mysql::MySqlRow, prelude::FromRow, query, query_as, MySql, Pool, Row};
+use serde::{Deserialize, Serialize};
+use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
@@ -12,29 +14,6 @@ pub mod downloader;
 pub mod extractor;
 pub mod follower;
 pub mod parser;
-
-#[derive(Debug, Clone, FromRow)]
-pub struct CountRow(i32);
-
-#[derive(Debug, Clone)]
-pub struct ProcessingLink {
-    pub id: i32,
-    pub link: String,
-    pub domain: String,
-    pub priority: i32,
-}
-
-impl FromRow<'_, MySqlRow> for ProcessingLink  {
-    #[tracing::instrument(skip_all)]
-    fn from_row(row: &'_ MySqlRow) -> Result<Self, sqlx::Error> {
-        Ok(Self {
-            id: row.try_get("id")?,
-            link: row.try_get("link")?,
-            domain: row.try_get("domain")?,
-            priority: row.try_get("priority")?,
-        })
-    }
-}
 
 #[derive(Debug)]
 pub struct ProcessingLinkNotFound;
@@ -47,25 +26,67 @@ impl fmt::Display for ProcessingLinkNotFound {
 
 impl Error for ProcessingLinkNotFound {}
 
-#[tracing::instrument(skip(pool))]
-#[must_use]
-pub async fn reset_tasks(pool: Pool<MySql>) -> Result<(), BoxError> {
-    let tx = pool.begin()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub enum LinkStatus {
+    Waiting,
+    Processing,
+    DownloadFailed,
+    ExtractionFailed,
+    Processed,
+}
 
-    let links = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link")
-        .fetch_all(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    for link in links {
-        set_waiting(pool.clone(), link.id).await?;
+impl LinkStatus {
+    pub fn from_string(x: &str) -> Option<Self> {
+        match x {
+            "waiting" => Some(LinkStatus::Waiting),
+            "processing" => Some(LinkStatus::Processing),
+            "download_failed" => Some(LinkStatus::DownloadFailed),
+            "extraction_failed" => Some(LinkStatus::ExtractionFailed),
+            "processed" => Some(LinkStatus::Processed),
+            _ => None,
+        }
     }
 
-    tx.commit()
+    pub fn to_string(self) -> &'static str {
+        match self {
+            LinkStatus::Waiting => "waiting",
+            LinkStatus::Processing => "processing",
+            LinkStatus::DownloadFailed => "download_failed",
+            LinkStatus::ExtractionFailed => "extraction_failed",
+            LinkStatus::Processed => "processed",
+        }
+    }
+}
+
+fn key_status_links(status: LinkStatus) -> String {
+    format!("link:links_by_status:{}", status.to_string())
+}
+
+fn key_link_status() -> String {
+    "link:status".to_string()
+}
+
+fn key_link_priority() -> String {
+    "link:priority".to_string()
+}
+
+fn key_link_domain() -> String {
+    "link:domain".to_string()
+}
+
+fn key_link_content_size() -> String {
+    "link:domain".to_string()
+}
+
+#[tracing::instrument(skip(pool))]
+#[must_use]
+pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError> {
+    let processing: Vec<String> = pool.zrange(key_status_links(LinkStatus::Processing), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
+    for word in processing {
+        update_status(pool.clone(), &word, LinkStatus::Waiting).await?;
+    }
 
     Ok(())
 }
@@ -74,16 +95,17 @@ pub async fn reset_tasks(pool: Pool<MySql>) -> Result<(), BoxError> {
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add_waiting(pool: Pool<MySql>, link: &str, domain: &str, priority: i32) -> Result<bool, BoxError> {
-    if !link_blacklist::is_allowed(&pool, link).await? || exists(pool.clone(), link).await? {
+pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, priority: f32) -> Result<bool, BoxError> {
+    if !link_blacklist::is_allowed(pool.clone(), link).await? || exists(pool.clone(), link).await? {
         return Ok(false);
     }
 
-    query("INSERT INTO waiting_link (link, domain, priority) VALUES (?, ?, ?)")
-        .bind(link)
-        .bind(domain)
-        .bind(priority)
-        .execute(&pool)
+    let _: () = redis::pipe()
+        .zadd(key_status_links(LinkStatus::Waiting), link, priority)
+        .hset(key_link_status(), link, LinkStatus::Waiting.to_string())
+        .hset(key_link_priority(), link, priority)
+        .hset(key_link_domain(), link, domain)
+        .exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -92,118 +114,38 @@ pub async fn add_waiting(pool: Pool<MySql>, link: &str, domain: &str, priority: 
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn poll_next_job(pool: Pool<MySql>) -> Result<Option<ProcessingLink>, BoxError> {
-    let tx = pool.begin()
+pub async fn get_status(mut pool: MultiplexedConnection, link: &str) -> Result<LinkStatus, BoxError> {
+    let status: String = pool.hget(key_link_status(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let waiting_link = query_as::<_, ProcessingLink>("SELECT waiting_link.id, waiting_link.link, waiting_link.domain, waiting_link.priority FROM waiting_link LEFT JOIN processing_link ON waiting_link.domain = processing_link.domain WHERE processing_link.domain IS NULL LIMIT 1")
-        .fetch_optional(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    let link = if let Some(waiting_link) = &waiting_link {
-        let processing_id = query("INSERT INTO processing_link (link, domain, priority) VALUES (?, ?, ?)")
-            .bind(waiting_link.link.clone())
-            .bind(waiting_link.domain.clone())
-            .bind(waiting_link.priority)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-            .last_insert_id();
-
-        let processing_link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
-            .bind(processing_id)
-            .fetch_one(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
-
-        query("DELETE FROM waiting_link WHERE id = ?")
-            .bind(waiting_link.id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
-
-        Some(processing_link)
-    } else {
-        None
-    };
-
-    tx.commit()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(link)
+    Ok(LinkStatus::from_string(&status).unwrap())
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn set_waiting(pool: Pool<MySql>, id: i32) -> Result<ProcessingLink, BoxError> {
-    let tx = pool.begin()
+pub async fn get_priority(mut redis_pool: MultiplexedConnection, link: &str) -> Result<f32, BoxError> {
+    let priority: f32 = redis_pool.hget(key_link_priority(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let processing_link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    let Some(processing_link) = processing_link else {
-        return Err(Box::new(ProcessingLinkNotFound));
-    };
-
-    query("INSERT INTO waiting_link (link, domain, priority) VALUES (?, ?, ?)")
-        .bind(processing_link.link.clone())
-        .bind(processing_link.domain.clone())
-        .bind(processing_link.priority)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    query("DELETE FROM processing_link WHERE id = ?")
-        .bind(processing_link.id)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    tx.commit()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(processing_link)
+    Ok(priority)
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn set_download_failed(pool: Pool<MySql>, id: i32) -> Result<(), BoxError> {
-    let tx = pool.begin()
+pub async fn get_domain(mut redis_pool: MultiplexedConnection, link: &str) -> Result<String, BoxError> {
+    let domain: String = redis_pool.hget(key_link_domain(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let processing_link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    Ok(domain)
+}
 
-    let Some(processing_link) = processing_link else {
-        return Err(Box::new(ProcessingLinkNotFound));
-    };
-
-    query("INSERT INTO download_failed_link (link) VALUES (?)")
-        .bind(processing_link.link.clone())
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    query("DELETE FROM processing_link WHERE id = ?")
-        .bind(processing_link.id)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    tx.commit()
+#[tracing::instrument(skip(redis_pool))]
+#[must_use]
+pub async fn set_content_size(mut redis_pool: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), BoxError> {
+    let _: () = redis_pool.hset(key_link_content_size(), link, content_size)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -212,131 +154,83 @@ pub async fn set_download_failed(pool: Pool<MySql>, id: i32) -> Result<(), BoxEr
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn set_extraction_failed(pool: Pool<MySql>, id: i32, content_size: i32) -> Result<(), BoxError> {
-    let tx = pool.begin()
+pub async fn links_with_status(mut pool: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
+    let count: usize = pool.zcard(key_status_links(status))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let processing_link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&pool)
+    Ok(count)
+}
+
+#[tracing::instrument(skip(pool))]
+#[must_use]
+pub async fn total_content_size(mut pool: MultiplexedConnection) -> Result<usize, BoxError> {
+    let sizes: Vec<usize> = pool.hvals(key_link_content_size())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(processing_link) = processing_link else {
-        return Err(Box::new(ProcessingLinkNotFound));
+    Ok(sizes.iter().sum())
+}
+
+#[tracing::instrument(skip(redis_pool))]
+#[must_use]
+pub async fn poll_next_job(mut redis_pool: MultiplexedConnection) -> Result<Option<String>, BoxError> {
+    let links: Vec<String> = redis_pool.zmpop_max(key_status_links(LinkStatus::Waiting), 1)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    let Some(link) = links.first() else {
+        return Ok(None)
     };
 
-    query("INSERT INTO extraction_failed_link (link, content_size) VALUES (?, ?)")
-        .bind(processing_link.link.clone())
-        .bind(content_size)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let link = link.clone();
 
-    query("DELETE FROM processing_link WHERE id = ?")
-        .bind(processing_link.id)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    update_status(redis_pool.clone(), &link, LinkStatus::Processing)
+        .await?;
 
-    tx.commit()
+    Ok(Some(link))
+}
+
+#[tracing::instrument(skip(redis_pool))]
+#[must_use]
+pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), BoxError> {
+    let previous_status = get_status(redis_pool.clone(), link)
+        .await?;
+    let priority = get_priority(redis_pool.clone(), link)
+        .await?;
+
+    let _: () = redis::pipe()
+        .zrem(key_status_links(previous_status), link)
+        .zadd(key_status_links(status), link, priority)
+        .hset(key_link_status(), link, status.to_string())
+        .exec_async(&mut redis_pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(())
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn set_processed(pool: Pool<MySql>, processing_id: i32, content_size: i32) -> Result<i32, BoxError> {
-    let tx = pool.begin()
+async fn exists(mut redis_pool: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
+    let exists: bool = redis_pool.hexists(key_link_status(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let processing_link = query_as::<_, ProcessingLink>("SELECT id, link, domain, priority FROM processing_link WHERE id = ?")
-        .bind(processing_id)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    let Some(processing_link) = processing_link else {
-        return Err(Box::new(ProcessingLinkNotFound));
-    };
-
-    let processed_id = query("INSERT INTO processed_link (link, content_size) VALUES (?, ?)")
-        .bind(processing_link.link)
-        .bind(content_size)
-        .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .last_insert_id() as i32;
-
-    query("DELETE FROM processing_link WHERE id = ?")
-        .bind(processing_id)
-       .execute(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    tx.commit()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(processed_id)
+    Ok(exists)
 }
 
-#[tracing::instrument(skip(pool))]
-#[must_use]
-async fn exists(pool: Pool<MySql>, link: &str) -> Result<bool, BoxError> {
-    let mut count = query_as::<_, CountRow>("SELECT count(waiting_link.id) FROM waiting_link WHERE link = ? LIMIT 1")
-        .bind(link)
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    count += query_as::<_, CountRow>("SELECT count(processing_link.id) FROM processing_link WHERE link = ? LIMIT 1")
-        .bind(link)
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    count += query_as::<_, CountRow>("SELECT count(download_failed_link.id) FROM download_failed_link WHERE link = ? LIMIT 1")
-        .bind(link)
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    count += query_as::<_, CountRow>("SELECT count(extraction_failed_link.id) FROM extraction_failed_link WHERE link = ? LIMIT 1")
-        .bind(link)
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    count += query_as::<_, CountRow>("SELECT count(processed_link.id) FROM processed_link WHERE link = ? LIMIT 1")
-        .bind(link)
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0;
-
-    Ok(count > 0)
-}
-
-#[tracing::instrument(skip(pool, client, semaphore))]
-pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore>, link: ProcessingLink) {
+#[tracing::instrument(skip(sql_pool, redis_pool, client, semaphore))]
+pub async fn process(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, client: Client, semaphore: Arc<Semaphore>, link: String) {
     let _permit = semaphore.acquire().await.unwrap();
 
     // Download
-    let download_result = downloader::download(client, link.clone()).await;
+    let download_result = downloader::download(redis_pool.clone(), client, link.clone()).await;
     if let Err(err) = download_result {
-        debug!("Error while downloading {}: {} (source: {:?})", link.link, err, err.source());
+        debug!("Error while downloading {}: {} (source: {:?})", link, err, err.source());
 
-        if let Err(err) = set_download_failed(pool.clone(), link.id).await {
-            warn!("Error while setting link to download failed {}: {} (source: {:?})", link.link, err, err.source());
+        if let Err(err) = update_status(redis_pool.clone(), &link, LinkStatus::DownloadFailed).await {
+            warn!("Error while setting download failed for {}: {} (source: {:?})", link, err, err.source());
         }
 
         return;
@@ -344,15 +238,19 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     let contents = download_result.unwrap();
 
-    trace!("Downloaded {} ({} characters)", link.link, &contents.len());
+    trace!("Downloaded {} ({} characters)", link, &contents.len());
 
     // Extract
     let extract_result = extractor::extract(&contents).await;
     if let Err(err) = extract_result {
-        debug!("Error while extracting schema from {}: {} (source: {:?})", link.link, err, err.source());
+        debug!("Error while extracting schema from {}: {} (source: {:?})", link, err, err.source());
 
-        if let Err(err) = set_extraction_failed(pool.clone(), link.id, contents.len() as i32).await {
-            warn!("Error while setting link to extraction failed for {}: {} (source: {:?})", link.link, err, err.source());
+        if let Err(err) = update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed).await {
+            warn!("Error while setting extraction failed for {}: {} (source: {:?})", link, err, err.source());
+        }
+
+        if let Err(err) = set_content_size(redis_pool.clone(), &link, contents.len()).await {
+            warn!("Error while setting content size for {}: {} (source: {:?})", link, err, err.source());
         }
 
         return;
@@ -360,39 +258,40 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
 
     let schema = extract_result.unwrap();
 
-    trace!("Extracted schema from {}", link.link);
+    trace!("Extracted schema from {}", link);
 
     // Parse
-    // Set to processing now rather than after following to avoid duplicate recipes appearing
-    let processed_result = set_processed(pool.clone(), link.id, contents.len() as i32).await;
+    // Set to processed now rather than after following to avoid duplicate recipes appearing
+    let processed_result = update_status(redis_pool.clone(), &link, LinkStatus::Processed).await;
     if let Err(err) = processed_result {
-        warn!("Error while setting status to PROCESSED for {}: {} (source: {:?})", link.link, err, err.source());
-
+        warn!("Error while setting status processed for {}: {} (source: {:?})", link, err, err.source());
         return;
     }
-    let id = processed_result.unwrap();
+    
+    if let Err(err) = set_content_size(redis_pool.clone(), &link, contents.len()).await {
+        warn!("Error while setting content size failed for {}: {} (source: {:?})", link, err, err.source());
+    }
 
-    let recipe = parser::parse(id, link.link.clone(), schema).await;
+    let recipe = parser::parse(link.to_string(), schema).await;
     let is_complete = recipe.is_complete();
 
     if recipe.should_add() {
-        if let Err(err) = recipe::add(pool.clone(), recipe).await {
-            warn!("Error while adding recipe from {}: {} (source: {:?})", link.link, err, err.source());
-
+        if let Err(err) = recipe::add(sql_pool.clone(), recipe).await {
+            warn!("Error while adding recipe from {}: {} (source: {:?})", link, err, err.source());
             return;
         }
     }
 
     if !is_complete {
-        trace!("Parsed incomplete recipe from {}", link.link);
+        trace!("Parsed incomplete recipe from {}", link);
         return;
 
     } else {
-        trace!("Parsed complete recipe from {}", link.link);
+        trace!("Parsed complete recipe from {}", link);
     }
 
     // Follow
-    let new_links = follower::follow(contents, link.link.clone()).await;
+    let new_links = follower::follow(contents, link.to_string()).await;
 
     let mut added_links = vec![];
     for new_link in &new_links {
@@ -400,7 +299,7 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
             .ok()
             .and_then(|url| url.domain().map(|domain| domain.to_owned()));
         if let Some(domain) = maybe_domain {
-            match link::add_waiting(pool.clone(), new_link, &domain, -1000).await {
+            match link::add(redis_pool.clone(), new_link, &domain, -1000.0).await {
                 Ok(added) => if added { 
                     added_links.push(new_link) 
                 }
@@ -409,10 +308,10 @@ pub async fn process(pool: Pool<MySql>, client: Client, semaphore: Arc<Semaphore
         }
     }
 
-    trace!("Followed {}/{} links from {}: {:?}", added_links.len(), new_links.len(), link.link, &added_links);
+    trace!("Followed {}/{} links from {}: {:?}", added_links.len(), new_links.len(), link, &added_links);
 }
 
-pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate>) {
+pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy: String, certificates: Vec<Certificate>) {
     info!("Started processor");
 
     let mut builder = ClientBuilder::new()
@@ -434,18 +333,17 @@ pub async fn run(pool: Pool<MySql>, proxy: String, certificates: Vec<Certificate
                 break;
             }
 
-            let link_result = poll_next_job(pool.clone()).await;
+            let link_result = poll_next_job(redis_pool.clone()).await;
             if let Err(err) = link_result {
                 warn!("Error while getting next job: {} (source: {:?})", err, err.source());
                 continue;
             }
 
             let Some(link) = link_result.unwrap() else {
-                dbg!("nop");
                 break;
             };
 
-            tokio::spawn(process(pool.clone(), client.clone(), semaphore.clone(), link));
+            tokio::spawn(process(sql_pool.clone(), redis_pool.clone(), client.clone(), semaphore.clone(), link));
         }
     }
 }
