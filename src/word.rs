@@ -65,11 +65,15 @@ fn key_word_priority(word: &str) -> String {
 pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: i32, status: WordStatus) -> Result<bool, BoxError> {
     let mut pipe = redis::pipe();
     pipe.zadd(key_status_words(status), priority as f32, word.to_string());
+    pipe.ignore();
     pipe.set(key_word_status(word), status.to_string());
+    pipe.ignore();
     pipe.set(key_word_priority(word), priority);
+    pipe.ignore();
 
     if let Some(parent) = parent {
         pipe.set(key_word_parent(word), parent.to_string());
+        pipe.ignore();
     }
         
     if exists(pool.clone(), word).await? {

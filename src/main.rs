@@ -121,7 +121,7 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(state))]
 async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
     match word::add(state.redis_pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
         Ok(was_added) => {
