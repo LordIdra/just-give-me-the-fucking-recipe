@@ -153,20 +153,18 @@ async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, Box
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn next_job(mut pool: MultiplexedConnection, status_from: WordStatus, status_to: WordStatus) -> Result<Option<String>, BoxError> {
-    let word: Option<[String; 1]> = pool.zpopmax(key_status_words(status_from), 1)
+    let words: Vec<String> = pool.zpopmax(key_status_words(status_from), 1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(word) = word else {
+    let Some(word) = words.first() else {
         return Ok(None);
     };
 
-    let word = word[0].clone();
-
-    let _: () = pool.set(key_word_status(&word), status_to.to_string())
+    let _: () = pool.set(key_word_status(word), status_to.to_string())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(Some(word))
+    Ok(Some(word.to_string()))
 }
 
