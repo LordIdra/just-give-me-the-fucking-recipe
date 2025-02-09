@@ -64,7 +64,7 @@ fn key_word_priority(word: &str) -> String {
 #[must_use]
 pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: i32, status: WordStatus) -> Result<bool, BoxError> {
     let mut pipe = redis::pipe();
-    pipe.zadd(key_status_words(status), priority, word.to_string());
+    pipe.zadd(key_status_words(status), priority as f32, word.to_string());
     pipe.set(key_word_status(word), status.to_string());
     pipe.set(key_word_priority(word), priority);
 
@@ -86,11 +86,11 @@ pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&st
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn get_priority(mut pool: MultiplexedConnection, word: &str) -> Result<i32, BoxError> {
-    let count: i32 = pool.get(key_word_priority(word))
+    let count: f32 = pool.get(key_word_priority(word))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(count)
+    Ok(count as i32)
 }
 
 #[tracing::instrument(skip(pool))]
