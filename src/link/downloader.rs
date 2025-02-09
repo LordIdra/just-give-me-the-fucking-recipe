@@ -28,7 +28,7 @@ pub fn headers() -> HeaderMap {
     headers.insert("Sec-Fetch-User", "?1".parse().unwrap());
     headers.insert("Sec-Gpc", "1".parse().unwrap());
     headers.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
-    headers.insert("User-Agent", "Prototype recipe search engine indexer".parse().unwrap());
+    //headers.insert("User-Agent", "Prototype recipe search engine indexer".parse().unwrap());
     headers
 }
 
