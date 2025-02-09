@@ -24,6 +24,24 @@ pub enum WordStatus {
 }
 
 impl WordStatus {
+    pub fn from_string(x: &str) -> Option<Self> {
+        match x {
+            "waiting_for_generation" => Some(WordStatus::WaitingForGeneration),
+            "generating" => Some(WordStatus::Generating),
+            "generation_failed" => Some(WordStatus::GenerationFailed),
+            "generation_complete" => Some(WordStatus::GenerationComplete),
+            "waiting_for_classification" => Some(WordStatus::WaitingForClassification),
+            "classifying" => Some(WordStatus::Classifying),
+            "classification_failed" => Some(WordStatus::ClassificationFailed),
+            "classified_as_invalid" => Some(WordStatus::ClassifiedAsInvalid),
+            "waiting_for_search" => Some(WordStatus::WaitingForSearch),
+            "searching" => Some(WordStatus::Searching),
+            "search_failed" => Some(WordStatus::SearchFailed),
+            "search_complete" => Some(WordStatus::SearchComplete),
+            _ => None,
+        }
+    }
+
     pub fn to_string(self) -> &'static str {
         match self {
             WordStatus::WaitingForGeneration => "waiting_for_generation",
@@ -64,7 +82,7 @@ fn key_word_priority(word: &str) -> String {
 #[must_use]
 pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: f32, status: WordStatus) -> Result<bool, BoxError> {
     let mut pipe = redis::pipe();
-    pipe.zadd(key_status_words(status), word.to_string(), priority as f32);
+    pipe.zadd(key_status_words(status), word.to_string(), priority);
     pipe.set(key_word_status(word), status.to_string());
     pipe.set(key_word_priority(word), priority);
 
@@ -95,6 +113,16 @@ pub async fn get_priority(mut pool: MultiplexedConnection, word: &str) -> Result
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
+pub async fn get_status(mut pool: MultiplexedConnection, word: &str) -> Result<WordStatus, BoxError> {
+    let status: String = pool.get(key_word_status(word))
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(WordStatus::from_string(&status).unwrap())
+}
+
+#[tracing::instrument(skip(pool))]
+#[must_use]
 pub async fn words_with_status(mut pool: MultiplexedConnection, status: WordStatus) -> Result<usize, BoxError> {
     let count: usize = pool.zcard(key_status_words(status))
         .await
@@ -106,7 +134,16 @@ pub async fn words_with_status(mut pool: MultiplexedConnection, status: WordStat
 #[tracing::instrument(skip(pool))]
 #[must_use]
 pub async fn update_status(mut pool: MultiplexedConnection, word: &str, status: WordStatus) -> Result<(), BoxError> {
-    let _: () = pool.set(key_word_status(word), status.to_string())
+    let previous_status = get_status(pool.clone(), word)
+        .await?;
+    let priority = get_priority(pool.clone(), word)
+        .await?;
+
+    redis::pipe()
+        .set(key_word_status(word), status.to_string())
+        .zrem(key_status_words(previous_status), word)
+        .zadd(key_status_words(status), word, priority)
+        .exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     

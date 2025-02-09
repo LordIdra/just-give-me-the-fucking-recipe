@@ -9,7 +9,7 @@ use tokio::{sync::Semaphore, time::interval};
 
 use crate::{gpt, word::{self, WordStatus}, BoxError};
 
-const MIN_WAITING_FOR_SEARCH: usize = 10;
+const MIN_WAITING_FOR_SEARCH: usize = 50;
 
 fn response_format() -> serde_json::Value {
     json!({
