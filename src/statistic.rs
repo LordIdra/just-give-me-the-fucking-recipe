@@ -18,7 +18,7 @@ async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
         .0)
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_pool, pool))]
 #[must_use]
 async fn update(redis_pool: MultiplexedConnection, pool: Pool<MySql>) -> Result<(), BoxError> {
     let timestamp = chrono::offset::Utc::now();

@@ -165,11 +165,11 @@ pub async fn links_with_status(mut redis_pool: MultiplexedConnection, status: Li
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
 pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result<usize, BoxError> {
-    let sizes: Vec<usize> = redis_pool.hvals(key_link_content_size())
+    let sizes: Vec<String> = redis_pool.hvals(key_link_content_size())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(sizes.iter().sum())
+    Ok(sizes.iter().filter_map(|v| v.parse::<usize>().ok()).sum())
 }
 
 #[tracing::instrument(skip(redis_pool))]
