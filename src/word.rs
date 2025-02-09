@@ -62,18 +62,14 @@ fn key_word_priority(word: &str) -> String {
 /// Returns false if word already existed
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: i32, status: WordStatus) -> Result<bool, BoxError> {
+pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&str>, priority: f32, status: WordStatus) -> Result<bool, BoxError> {
     let mut pipe = redis::pipe();
-    pipe.zadd(key_status_words(status), priority as f32, word.to_string());
-    pipe.ignore();
+    pipe.zadd(key_status_words(status), word.to_string(), priority as f32);
     pipe.set(key_word_status(word), status.to_string());
-    pipe.ignore();
     pipe.set(key_word_priority(word), priority);
-    pipe.ignore();
 
     if let Some(parent) = parent {
         pipe.set(key_word_parent(word), parent.to_string());
-        pipe.ignore();
     }
         
     if exists(pool.clone(), word).await? {
@@ -89,12 +85,12 @@ pub async fn add(mut pool: MultiplexedConnection, word: &str, parent: Option<&st
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn get_priority(mut pool: MultiplexedConnection, word: &str) -> Result<i32, BoxError> {
-    let count: f32 = pool.get(key_word_priority(word))
+pub async fn get_priority(mut pool: MultiplexedConnection, word: &str) -> Result<f32, BoxError> {
+    let priority: f32 = pool.get(key_word_priority(word))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    Ok(count as i32)
+    Ok(priority)
 }
 
 #[tracing::instrument(skip(pool))]

@@ -47,7 +47,7 @@ async fn generate(pool: MultiplexedConnection, client: Client, openai_key: Strin
 
     let response = gpt::query_gpt::<Output>(&client, response_format(), openai_key, input).await?;
     for output in response.output {
-        if word::add(pool.clone(), &output, Some(job), -1, WordStatus::WaitingForClassification).await? {
+        if word::add(pool.clone(), &output, Some(job), -1.0, WordStatus::WaitingForClassification).await? {
             trace!("Added generated word {}", output)
         } else {
             trace!("Rejected duplicate generated word {}", output)

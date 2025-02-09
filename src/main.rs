@@ -123,7 +123,7 @@ async fn main() {
 
 #[tracing::instrument(skip(state))]
 async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
-    match word::add(state.redis_pool, &request.keyword, None, 0, WordStatus::WaitingForClassification).await {
+    match word::add(state.redis_pool, &request.keyword, None, 0.0, WordStatus::WaitingForClassification).await {
         Ok(was_added) => {
             if was_added {
                 trace!("Added new input {}", request.keyword);

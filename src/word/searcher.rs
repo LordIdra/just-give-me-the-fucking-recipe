@@ -97,7 +97,7 @@ async fn search(sql_pool: Pool<MySql>, pool: MultiplexedConnection, client: Clie
         };
 
         let priority = word::get_priority(pool.clone(), job).await?;
-        link::add_waiting(sql_pool.clone(), &link.link, domain, priority).await?;
+        link::add_waiting(sql_pool.clone(), &link.link, domain, priority as i32).await?;
     }
 
     trace!("Searched keyword '{}' and found: {:?}", job, link_names);
