@@ -70,7 +70,6 @@ fn key_processing_domains() -> String {
     "link:processing_domains".to_string()
 }
 
-
 fn key_not_processing_domains() -> String {
     "link:not_processing_domains".to_string()
 }
@@ -119,6 +118,7 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
         .sadd(key_domain_to_waiting_links(domain), link)
+        .sadd(key_not_processing_domains(), domain)
         .exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -381,7 +381,7 @@ pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy
     
     let client = builder.build().unwrap();
     let semaphore = Arc::new(Semaphore::new(512));
-    let mut interval = interval(Duration::from_millis(2000));
+    let mut interval = interval(Duration::from_millis(1000));
 
     loop {
         interval.tick().await;

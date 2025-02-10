@@ -66,7 +66,7 @@ pub async fn run(pool: MultiplexedConnection, openai_key: String) {
 
     let semaphore = Arc::new(Semaphore::new(16));
 
-    let mut interval = interval(Duration::from_millis(500));
+    let mut interval = interval(Duration::from_millis(1000));
 
     loop {
         interval.tick().await;

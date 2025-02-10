@@ -123,7 +123,7 @@ pub async fn run(sql_pool: Pool<MySql>, pool: MultiplexedConnection, serper_key:
 
     let semaphore = Arc::new(Semaphore::new(1));
 
-    let mut interval = interval(Duration::from_millis(60000));
+    let mut interval = interval(Duration::from_millis(1000));
 
     loop {
         interval.tick().await;
