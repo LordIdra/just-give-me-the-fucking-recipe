@@ -53,7 +53,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
         .bind(link::links_with_status(redis_pool.clone(), LinkStatus::DownloadFailed).await? as i32)
         .bind(link::links_with_status(redis_pool.clone(), LinkStatus::ExtractionFailed).await? as i32)
         .bind(link::links_with_status(redis_pool.clone(), LinkStatus::Processed).await? as i32)
-        .bind(link::total_content_size(redis_pool.clone()).await? as i32)
+        .bind(link::total_content_size(redis_pool.clone()).await? as u64)
         .execute(&pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
