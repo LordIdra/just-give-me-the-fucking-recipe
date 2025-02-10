@@ -5,7 +5,6 @@ use log::{info, trace, warn};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
-use sqlx::{query_as, FromRow, MySql, Pool};
 use tokio::{sync::Semaphore, time::interval};
 use url::Url;
 
@@ -13,10 +12,7 @@ use crate::{link::{self}, word::{self, WordStatus}, BoxError, UnexpectedStatusCo
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
-const MIN_WAITING_FOR_PROCESSING: i64 = 200;
-
-#[derive(FromRow)]
-struct OneBigInt(i64);
+const MIN_DOMAINS_IN_SYSTEM: usize = 1000;
 
 #[derive(Debug, Serialize)]
 struct SerperRequest {
@@ -43,7 +39,7 @@ struct SiteLink {
 }
 
 #[tracing::instrument(skip(pool, client, serper_key))]
-async fn search(sql_pool: Pool<MySql>, pool: MultiplexedConnection, client: Client, serper_key: String, job: &str) -> Result<(), BoxError> {
+async fn search(pool: MultiplexedConnection, client: Client, serper_key: String, job: &str) -> Result<(), BoxError> {
     let query = job.to_string() + " recipe";
     let mut headers = HeaderMap::new();
     headers.insert("X-API-KEY", serper_key.parse().unwrap());
@@ -107,16 +103,7 @@ async fn search(sql_pool: Pool<MySql>, pool: MultiplexedConnection, client: Clie
     Ok(())
 }
 
-pub async fn waiting_domains_count(pool: Pool<MySql>) -> Result<i64, BoxError> {
-    // REALLY SLOW QUERY
-    Ok(query_as::<_, OneBigInt>("SELECT COUNT(DISTINCT domain) FROM waiting_link")
-        .fetch_one(&pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .0)
-}
-
-pub async fn run(sql_pool: Pool<MySql>, pool: MultiplexedConnection, serper_key: String) {
+pub async fn run(redis_pool: MultiplexedConnection, serper_key: String) {
     info!("Started searcher");
 
     let client = Client::new();
@@ -128,13 +115,13 @@ pub async fn run(sql_pool: Pool<MySql>, pool: MultiplexedConnection, serper_key:
     loop {
         interval.tick().await;
 
-        let current_domains_waiting_for_processing = waiting_domains_count(sql_pool.clone()).await;
+        let current_domains_waiting_for_processing = link::domains_in_system(redis_pool.clone()).await;
         if let Err(err) = current_domains_waiting_for_processing {
             warn!("Error while getting words with status WAITING_FOR_PROCESSING: {} (source: {:?})", err, err.source());
             continue;
         }
 
-        if current_domains_waiting_for_processing.unwrap() >= MIN_WAITING_FOR_PROCESSING {
+        if current_domains_waiting_for_processing.unwrap() >= MIN_DOMAINS_IN_SYSTEM {
             continue;
         }
 
@@ -143,7 +130,7 @@ pub async fn run(sql_pool: Pool<MySql>, pool: MultiplexedConnection, serper_key:
                 break
             }
 
-            let next_job = word::next_job(pool.clone(), WordStatus::WaitingForSearch, WordStatus::SearchComplete).await;
+            let next_job = word::next_job(redis_pool.clone(), WordStatus::WaitingForSearch, WordStatus::SearchComplete).await;
             if let Err(err) = next_job {
                 warn!("Error while getting next job: {}", err);
                 break;
@@ -156,14 +143,13 @@ pub async fn run(sql_pool: Pool<MySql>, pool: MultiplexedConnection, serper_key:
             let sempahore = semaphore.clone();
             let client = client.clone();
             let serper_key = serper_key.clone();
-            let sql_pool = sql_pool.clone();
-            let pool = pool.clone();
+            let redis_pool = redis_pool.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = search(sql_pool, pool.clone(), client, serper_key, &next_job).await {
+                if let Err(err) = search(redis_pool.clone(), client, serper_key, &next_job).await {
                     warn!("Searcher encountered error on word '{}': {} (source: {:?})", next_job, err, err.source());
-                    if let Err(err) = word::update_status(pool, &next_job, WordStatus::SearchFailed).await {
+                    if let Err(err) = word::update_status(redis_pool, &next_job, WordStatus::SearchFailed).await {
                         warn!("Error while setting status to failed on word '{}': {} (source: {:?})", next_job, err, err.source());
                     }
                 }

@@ -70,8 +70,8 @@ fn key_processing_domains() -> String {
     "link:processing_domains".to_string()
 }
 
-fn key_not_processing_domains() -> String {
-    "link:not_processing_domains".to_string()
+fn key_waiting_domains() -> String {
+    "link:waiting_domains".to_string()
 }
 
 fn key_link_to_status() -> String {
@@ -118,7 +118,7 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
         .zadd(key_domain_to_waiting_links(domain), link, priority)
-        .sadd(key_not_processing_domains(), domain)
+        .sadd(key_waiting_domains(), domain)
         .exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -189,7 +189,7 @@ pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
 pub async fn poll_next_job(mut redis_pool: MultiplexedConnection) -> Result<Option<String>, BoxError> {
-    let next_domain: Option<String> = redis_pool.spop(key_not_processing_domains())
+    let next_domain: Option<String> = redis_pool.spop(key_waiting_domains())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -222,6 +222,18 @@ pub async fn is_domain_waiting(mut redis_pool: MultiplexedConnection, domain: &s
 
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
+pub async fn domains_in_system(mut redis_pool: MultiplexedConnection) -> Result<usize, BoxError> {
+    let processing: usize = redis_pool.scard(key_processing_domains())
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+    let waiting: usize = redis_pool.scard(key_waiting_domains())
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+    Ok(processing + waiting)
+}
+
+#[tracing::instrument(skip(redis_pool))]
+#[must_use]
 pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), BoxError> {
     let previous_status = get_status(redis_pool.clone(), link)
         .await?;
@@ -250,7 +262,7 @@ pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, st
     // Results of previous computation are required here so use a new pipe
     let mut pipe = redis::pipe();
     if status == LinkStatus::Processing {
-        pipe.srem(key_not_processing_domains(), domain.clone());
+        pipe.srem(key_waiting_domains(), domain.clone());
         pipe.sadd(key_processing_domains(), domain.clone());
     }
 
