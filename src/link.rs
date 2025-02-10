@@ -392,8 +392,8 @@ pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy
     }
     
     let client = builder.build().unwrap();
-    let semaphore = Arc::new(Semaphore::new(512));
-    let mut interval = interval(Duration::from_millis(1000));
+    let semaphore = Arc::new(Semaphore::new(2048));
+    let mut interval = interval(Duration::from_millis(500));
 
     loop {
         interval.tick().await;
