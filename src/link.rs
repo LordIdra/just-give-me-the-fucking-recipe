@@ -117,7 +117,7 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .hset(key_link_to_status(), link, LinkStatus::Waiting.to_string())
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
-        .sadd(key_domain_to_waiting_links(domain), link)
+        .zadd(key_domain_to_waiting_links(domain), link, priority)
         .sadd(key_not_processing_domains(), domain)
         .exec_async(&mut pool)
         .await
@@ -236,11 +236,11 @@ pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, st
     pipe.hset(key_link_to_status(), link, status.to_string());
 
     if status == LinkStatus::Waiting {
-        pipe.sadd(key_domain_to_waiting_links(&domain), link);
+        pipe.zadd(key_domain_to_waiting_links(&domain), link, priority);
     }
 
     if previous_status == LinkStatus::Waiting {
-        pipe.srem(key_domain_to_waiting_links(&domain), link);
+        pipe.zrem(key_domain_to_waiting_links(&domain), link);
     }
 
     pipe.exec_async(&mut redis_pool)
