@@ -117,11 +117,20 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .hset(key_link_to_status(), link, LinkStatus::Waiting.to_string())
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
-        .zadd(key_domain_to_waiting_links(domain), link, priority)
         .sadd(key_waiting_domains(), domain)
         .exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
+
+    let is_domain_processing: bool = pool.sismember(key_processing_domains(), link)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    if !is_domain_processing {
+        let _: () = pool.zadd(key_domain_to_waiting_links(domain), link, priority)
+            .await
+            .map_err(|err| Box::new(err) as BoxError)?;
+    }
 
     Ok(true)
 }
