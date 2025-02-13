@@ -5,7 +5,7 @@ use redis::{aio::MultiplexedConnection, AsyncCommands};
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
 use serde::{Deserialize, Serialize};
 use sqlx::{MySql, Pool};
-use tokio::{sync::Semaphore, time::interval};
+use tokio::{sync::Semaphore, task::JoinSet, time::interval};
 use url::Url;
 
 use crate::{link, link_blacklist, recipe, BoxError};
@@ -122,7 +122,7 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let is_domain_processing: bool = pool.sismember(key_processing_domains(), link)
+    let is_domain_processing: bool = pool.sismember(key_processing_domains(), domain)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -197,27 +197,37 @@ pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result
 
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
-pub async fn poll_next_job(mut redis_pool: MultiplexedConnection) -> Result<Option<String>, BoxError> {
-    let next_domain: Option<String> = redis_pool.spop(key_waiting_domains())
+pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize) -> Result<Vec<String>, BoxError> {
+    let next_domains: Vec<String> = redis_pool.srem(key_waiting_domains(), count)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(next_domain) = next_domain else {
-        return Ok(None);
-    };
-
-    let links: Vec<String> = redis_pool.zpopmax(key_domain_to_waiting_links(&next_domain), 1)
+    let mut futures = JoinSet::new();
+    for domain in next_domains {
+        let redis_pool = redis_pool.clone();
+        futures.spawn(async move {
+            redis_pool.clone().zpopmax::<_, String>(key_domain_to_waiting_links(&domain), 1).await
+        });
+    }
+    let next_links: Vec<String> = futures.join_all()
         .await
+        .into_iter()
+        .collect::<Result<Vec<String>, _>>()
         .map_err(|err| Box::new(err) as BoxError)?;
 
-    let Some(link) = links.first() else {
-        return Ok(None) // should not generally happen
-    };
+    let mut futures = JoinSet::new();
+    for link in next_links.clone() {
+        let redis_pool = redis_pool.clone();
+        futures.spawn(async move {
+            update_status(redis_pool.clone(), &link, LinkStatus::Processing).await
+        });
+    }
+    futures.join_all()
+        .await
+        .into_iter()
+        .collect::<Result<(), _>>()?;
 
-    update_status(redis_pool.clone(), link, LinkStatus::Processing)
-        .await?;
-
-    Ok(Some(link.to_string()))
+    Ok(next_links)
 }
 
 #[tracing::instrument(skip(redis_pool))]
@@ -407,21 +417,17 @@ pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy
     loop {
         interval.tick().await;
         
-        loop {
-            if semaphore.available_permits() == 0 {
-                break;
-            }
+        if semaphore.available_permits() == 0 {
+            continue;
+        }
 
-            let link_result = poll_next_job(redis_pool.clone()).await;
-            if let Err(err) = link_result {
-                warn!("Error while getting next job: {} (source: {:?})", err, err.source());
-                continue;
-            }
+        let links_result = poll_next_jobs(redis_pool.clone(), semaphore.available_permits()).await;
+        if let Err(err) = links_result {
+            warn!("Error while getting next job: {} (source: {:?})", err, err.source());
+            continue;
+        }
 
-            let Some(link) = link_result.unwrap() else {
-                break;
-            };
-
+        for link in links_result.unwrap() {
             tokio::spawn(process(sql_pool.clone(), redis_pool.clone(), client.clone(), semaphore.clone(), link));
         }
     }
