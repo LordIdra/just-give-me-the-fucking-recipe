@@ -206,14 +206,17 @@ pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize)
     for domain in next_domains {
         let redis_pool = redis_pool.clone();
         futures.spawn(async move {
-            redis_pool.clone().zpopmax::<_, String>(key_domain_to_waiting_links(&domain), 1).await
+            redis_pool.clone().zpopmax::<_, Vec<String>>(key_domain_to_waiting_links(&domain), 1).await
         });
     }
     let next_links: Vec<String> = futures.join_all()
         .await
         .into_iter()
-        .collect::<Result<Vec<String>, _>>()
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .collect::<Result<Vec<Vec<String>>, _>>()
+        .map_err(|err| Box::new(err) as BoxError)?
+        .into_iter()
+        .filter_map(|entry| entry.first().cloned())
+        .collect();
 
     let mut futures = JoinSet::new();
     for link in next_links.clone() {
