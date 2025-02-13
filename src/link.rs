@@ -198,7 +198,7 @@ pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result
 #[tracing::instrument(skip(redis_pool))]
 #[must_use]
 pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize) -> Result<Vec<String>, BoxError> {
-    let next_domains: Vec<String> = redis_pool.srem(key_waiting_domains(), count)
+    let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
