@@ -16,5 +16,5 @@ cursor.execute("SELECT link, domain, priority FROM waiting_link")
 result = cursor.fetchall()
 
 for row in result:
-    print(row["link"])
+    print(row[0])
 
