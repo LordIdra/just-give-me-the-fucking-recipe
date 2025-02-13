@@ -24,9 +24,9 @@ result = cursor.fetchall()
 r.flushall()
 
 for row in result:
-    link = row[0]
-    domain = row[1]
-    priority = row[2]
+    link = str(row[0])
+    domain = str(row[1])
+    priority = float(row[2])
     
     r.zadd("link:links_by_status:waiting", link)
     r.hset("link:status", link, "waiting")
