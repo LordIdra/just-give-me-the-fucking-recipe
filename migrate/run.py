@@ -28,12 +28,10 @@ for row in result:
     domain = str(row[1])
     priority = float(row[2])
 
-    print(link)
-    
-    r.zadd("link:links_by_status:waiting", link)
+    r.zadd("link:links_by_status:waiting", { link: priority})
     r.hset("link:status", link, "waiting")
     r.hset("link:priority", link, priority)
     r.hset("link:domain", link, domain)
-    r.zadd("link:waiting_links_by_domain:" + domain, link, priority)
+    r.zadd("link:waiting_links_by_domain:" + domain, { link: priority })
     r.sadd("link:waiting_domains", domain)
     
