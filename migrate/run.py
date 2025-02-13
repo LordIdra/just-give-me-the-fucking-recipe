@@ -27,6 +27,8 @@ for row in result:
     link = str(row[0])
     domain = str(row[1])
     priority = float(row[2])
+
+    print(link)
     
     r.zadd("link:links_by_status:waiting", link)
     r.hset("link:status", link, "waiting")
