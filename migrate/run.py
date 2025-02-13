@@ -3,6 +3,7 @@ import sys
 
 mydb = mysql.connector.connect(
     host="localhost",
+    port=7712,
     user=sys.argv[1],
     password=sys.argv[2],
     database="recipe",
