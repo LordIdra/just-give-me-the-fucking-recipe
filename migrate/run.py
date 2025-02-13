@@ -1,3 +1,4 @@
+import redis
 import mysql.connector
 import sys
 
@@ -9,12 +10,28 @@ mydb = mysql.connector.connect(
     database="recipe",
 )
 
+r = redis.Redis(
+    host='localhost', 
+    port=6379, 
+    db=0,
+)
+
 cursor = mydb.cursor()
 
 cursor.execute("SELECT link, domain, priority FROM waiting_link")
-
 result = cursor.fetchall()
 
-for row in result:
-    print(row[0])
+r.flushall()
 
+for row in result:
+    link = row[0]
+    domain = row[1]
+    priority = row[2]
+    
+    r.zadd("link:links_by_status:waiting", link)
+    r.hset("link:status", link, "waiting")
+    r.hset("link:priority", link, priority)
+    r.hset("link:domain", link, domain)
+    r.zadd("link:waiting_links_by_domain:" + domain, link, priority)
+    r.sadd("link:waiting_domains", domain)
+    
