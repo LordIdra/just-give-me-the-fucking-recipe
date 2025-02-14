@@ -95,7 +95,7 @@ def migrate_word():
         r.hset("word:status", word, status)
         r.hset("word:priority", word, str(priority))
 
-        if parent is not None:
+        if parent != "None": # lol
             print(parent)
             r.hset("word:parent", parent)
  
