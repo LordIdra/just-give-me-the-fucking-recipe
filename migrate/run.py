@@ -97,6 +97,7 @@ def migrate_word():
 
         if parent is not None:
             print(parent)
+            print(str(parent))
             r.hset("word:parent", str(parent))
  
 
