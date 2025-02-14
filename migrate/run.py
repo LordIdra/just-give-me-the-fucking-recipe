@@ -98,6 +98,7 @@ def migrate_word():
         if parent is not None:
             print(parent)
             print(str(parent))
+            print(f"Value: {parent}, Type: {type(parent)}")
             r.hset("word:parent", str(parent))
  
 
