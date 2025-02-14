@@ -101,12 +101,12 @@ def migrate_word():
         priority = str(row[2])
         status = str(row[3]).lower()
     
-        r.zadd("words:words_by_status:" + status, { word: priority})
-        r.hset("link:status", word, status)
-        r.hset("link:priority", word, str(priority))
+        r.zadd("word:words_by_status:" + status, { word: priority})
+        r.hset("word:status", word, status)
+        r.hset("word:priority", word, str(priority))
 
         if parent != None:
-            r.hset("link:parent", parent)
+            r.hset("word:parent", parent)
  
 migrate_waiting()
 migrate_download_failed()
