@@ -96,10 +96,7 @@ def migrate_word():
         r.hset("word:priority", word, str(priority))
 
         if parent is not None:
-            print(parent)
-            print(str(parent))
-            print(f"Value: {parent}, Type: {type(parent)}")
-            r.hset("word:parent", str(parent))
+            r.hset("word:parent", word, str(parent))
  
 
 r.flushall()
