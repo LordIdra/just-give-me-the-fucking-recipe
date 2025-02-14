@@ -87,7 +87,7 @@ def migrate_word():
     
     for row in result:
         word = str(row[0])
-        parent = str(row[1])
+        parent = row[1]
         priority = str(row[2])
         status = str(row[3]).lower()
     
@@ -95,9 +95,8 @@ def migrate_word():
         r.hset("word:status", word, status)
         r.hset("word:priority", word, str(priority))
 
-        if parent != "None" and parent != None and not parent is None: # lol
-            print(parent)
-            r.hset("word:parent", parent)
+        if parent is not None:
+            r.hset("word:parent", str(parent))
  
 
 r.flushall()
