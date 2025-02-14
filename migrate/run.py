@@ -23,8 +23,6 @@ def migrate_waiting():
     cursor.execute("SELECT link, domain, priority FROM waiting_link")
     result = cursor.fetchall()
     
-    r.flushall()
-    
     for row in result:
         link = str(row[0])
         domain = str(row[1])
@@ -41,8 +39,6 @@ def migrate_download_failed():
     cursor.execute("SELECT link FROM download_failed_link")
     result = cursor.fetchall()
     
-    r.flushall()
-    
     for row in result:
         link = str(row[0])
         domain = tldextract.extract(link).domain
@@ -56,8 +52,6 @@ def migrate_download_failed():
 def migrate_extraction_failed():
     cursor.execute("SELECT link, content_size FROM extraction_failed_link")
     result = cursor.fetchall()
-    
-    r.flushall()
     
     for row in result:
         link = str(row[0])
@@ -75,8 +69,6 @@ def migrate_processed():
     cursor.execute("SELECT link, content_size FROM processed_link")
     result = cursor.fetchall()
     
-    r.flushall()
-    
     for row in result:
         link = str(row[0])
         content_size = str(row[1])
@@ -93,8 +85,6 @@ def migrate_word():
     cursor.execute("SELECT word, parent_new, priority, status FROM word")
     result = cursor.fetchall()
     
-    r.flushall()
-    
     for row in result:
         word = str(row[0])
         parent = str(row[1])
@@ -106,11 +96,14 @@ def migrate_word():
         r.hset("word:priority", word, str(priority))
 
         if parent != None:
+            print(parent)
             r.hset("word:parent", parent)
  
+
+r.flushall()
+migrate_word()
 migrate_waiting()
 migrate_download_failed()
 migrate_extraction_failed()
 migrate_processed()
-migrate_word()
 
