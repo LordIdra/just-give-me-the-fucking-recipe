@@ -9,3 +9,19 @@ r = redis.Redis(
 keys = r.hkeys("link:status")
 print(keys)
 
+for key in keys:
+    status = r.hget("link:status", key)
+
+    if status == "waiting":
+        pass
+    elif status == "processing":
+        pass
+    elif status == "download_failed":
+        pass
+    elif status == "extraction_failed":
+        pass
+    elif status == "processed":
+        pass
+    else:
+        print("bruh")
+
