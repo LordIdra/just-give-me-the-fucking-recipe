@@ -4,11 +4,12 @@ use log::{debug, info, trace, warn};
 use redis::{aio::MultiplexedConnection, AsyncCommands};
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, task::JoinSet, time::interval};
 use url::Url;
 
-use crate::{link, link_blacklist, recipe, BoxError};
+use crate::{link, link_blacklist, recipe::{self, Recipe}, BoxError};
 
 pub mod downloader;
 pub mod extractor;
@@ -86,6 +87,10 @@ fn key_link_to_domain() -> String {
     "link:domain".to_string()
 }
 
+fn key_link_to_remaining_follows() -> String {
+    "link:domain".to_string()
+}
+
 fn key_link_to_content_size() -> String {
     "link:content_size".to_string()
 }
@@ -107,7 +112,13 @@ pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, priority: f32) -> Result<bool, BoxError> {
+pub async fn add(
+    mut pool: MultiplexedConnection,
+    link: &str,
+    domain: &str,
+    priority: f32,
+    remaining_follows: i32,
+) -> Result<bool, BoxError> {
     if !link_blacklist::is_allowed(pool.clone(), link).await? || exists(pool.clone(), link).await? {
         return Ok(false);
     }
@@ -117,6 +128,7 @@ pub async fn add(mut pool: MultiplexedConnection, link: &str, domain: &str, prio
         .hset(key_link_to_status(), link, LinkStatus::Waiting.to_string())
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
+        .hset(key_link_to_remaining_follows(), link, remaining_follows)
         .sadd(key_waiting_domains(), domain)
         .exec_async(&mut pool)
         .await
@@ -163,6 +175,16 @@ pub async fn get_domain(mut redis_pool: MultiplexedConnection, link: &str) -> Re
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(domain)
+}
+
+#[tracing::instrument(skip(redis_pool))]
+#[must_use]
+pub async fn get_remaining_follows(mut redis_pool: MultiplexedConnection, link: &str) -> Result<i32, BoxError> {
+    let remaining_follows: i32 = redis_pool.hget(key_link_to_remaining_follows(), link)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    Ok(remaining_follows)
 }
 
 #[tracing::instrument(skip(redis_pool))]
@@ -312,77 +334,118 @@ async fn exists(mut redis_pool: MultiplexedConnection, link: &str) -> Result<boo
     Ok(exists)
 }
 
-#[tracing::instrument(skip(sql_pool, redis_pool, client, semaphore))]
-pub async fn process(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, client: Client, semaphore: Arc<Semaphore>, link: String) {
-    let _permit = semaphore.acquire().await.unwrap();
+#[tracing::instrument(skip(redis_pool, client))]
+pub async fn process_download(
+    redis_pool: MultiplexedConnection, 
+    client: Client, 
+    link: String
+) -> Result<String, BoxError> {
+    let downloaded = downloader::download(redis_pool.clone(), client, link.clone())
+        .await;
 
-    // Download
-    let download_result = downloader::download(redis_pool.clone(), client, link.clone()).await;
-    if let Err(err) = download_result {
-        debug!("Error while downloading {}: {} (source: {:?})", link, err, err.source());
-
-        if let Err(err) = update_status(redis_pool.clone(), &link, LinkStatus::DownloadFailed).await {
-            warn!("Error while setting download failed for {}: {} (source: {:?})", link, err, err.source());
-        }
-
-        return;
+    if let Err(err) = downloaded {
+        update_status(redis_pool.clone(), &link, LinkStatus::DownloadFailed)
+            .await?;
+        return Err(err)
     }
 
-    let contents = download_result.unwrap();
+    Ok(downloaded.unwrap())
+}
 
-    trace!("Downloaded {} ({} characters)", link, &contents.len());
+#[tracing::instrument(skip(redis_pool, contents))]
+pub async fn process_extract(
+    redis_pool: MultiplexedConnection, 
+    contents: String,
+    link: String
+) -> Result<Option<Value>, BoxError> {
+    let extracted = extractor::extract(&contents)
+        .await;
 
-    // Extract
-    let extract_result = extractor::extract(&contents).await;
-    if let Err(err) = extract_result {
-        debug!("Error while extracting schema from {}: {} (source: {:?})", link, err, err.source());
-
-        if let Err(err) = update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed).await {
-            warn!("Error while setting extraction failed for {}: {} (source: {:?})", link, err, err.source());
-        }
-
-        if let Err(err) = set_content_size(redis_pool.clone(), &link, contents.len()).await {
-            warn!("Error while setting content size for {}: {} (source: {:?})", link, err, err.source());
-        }
-
-        return;
+    if let Err(err) = extracted {
+        update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed)
+            .await?;
+        set_content_size(redis_pool.clone(), &link, contents.len())
+            .await?;
+        return Err(err);
     }
 
-    let schema = extract_result.unwrap();
+    let extracted = extracted.unwrap();
 
-    trace!("Extracted schema from {}", link);
+    if extracted.is_none() {
+        update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed)
+            .await?;
+        set_content_size(redis_pool.clone(), &link, contents.len())
+            .await?;
+        return Ok(None);
+    }
 
-    // Parse
+    Ok(extracted)
+}
+
+#[tracing::instrument(skip(sql_pool, redis_pool, schema))]
+pub async fn process_parse(
+    sql_pool: Pool<MySql>,
+    redis_pool: MultiplexedConnection, 
+    schema: Value,
+    link: String
+) -> Result<Recipe, BoxError> {
     // Set to processed now rather than after following to avoid duplicate recipes appearing
-    let processed_result = update_status(redis_pool.clone(), &link, LinkStatus::Processed).await;
-    if let Err(err) = processed_result {
-        warn!("Error while setting status processed for {}: {} (source: {:?})", link, err, err.source());
-        return;
-    }
-    
-    if let Err(err) = set_content_size(redis_pool.clone(), &link, contents.len()).await {
-        warn!("Error while setting content size failed for {}: {} (source: {:?})", link, err, err.source());
-    }
+    update_status(redis_pool.clone(), &link, LinkStatus::Processed)
+        .await?;
 
-    let recipe = parser::parse(link.to_string(), schema).await;
-    let is_complete = recipe.is_complete();
+    let parsed = parser::parse(link.to_string(), schema)
+        .await;
 
-    if recipe.should_add() {
-        if let Err(err) = recipe::add(sql_pool.clone(), recipe).await {
-            warn!("Error while adding recipe from {}: {} (source: {:?})", link, err, err.source());
-            return;
-        }
+    if parsed.should_add() {
+        recipe::add(sql_pool.clone(), parsed.clone())
+            .await?;
     }
 
-    if !is_complete {
+    if !parsed.is_complete() {
         trace!("Parsed incomplete recipe from {}", link);
-        return;
-
     } else {
         trace!("Parsed complete recipe from {}", link);
     }
 
-    // Follow
+    Ok(parsed)
+}
+
+#[tracing::instrument(skip(redis_pool, contents, recipe))]
+pub async fn process_follow(
+    redis_pool: MultiplexedConnection, 
+    contents: String,
+    recipe: Option<Recipe>,
+    link: String
+) -> Result<(), BoxError> {
+    let recipe_should_add = recipe.as_ref().is_some_and(|recipe| recipe.should_add());
+    let recipe_is_complete = recipe.as_ref().is_some_and(|recipe| recipe.is_complete());
+
+    // Remaining follows
+    let remaining_follows = get_remaining_follows(redis_pool.clone(), &link)
+        .await?;
+    if remaining_follows <= 0 && !recipe_is_complete {
+        trace!("Terminated follow for {}", link);
+        return Ok(())
+    }
+
+    let new_remaining_follows = if recipe_is_complete {
+        2
+    } else if recipe_should_add {
+        1
+    } else {
+        remaining_follows - 1
+    };
+
+    // Priority
+    let new_priority = if recipe_is_complete {
+        0.0
+    } else if recipe_should_add {
+        -1.0
+    } else {
+        -2.0
+    };
+
+    // Following logic finally
     let new_links = follower::follow(contents, link.to_string()).await;
 
     let mut added_links = vec![];
@@ -390,17 +453,69 @@ pub async fn process(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, c
         let maybe_domain = Url::parse(new_link)
             .ok()
             .and_then(|url| url.domain().map(|domain| domain.to_owned()));
+
         if let Some(domain) = maybe_domain {
-            match link::add(redis_pool.clone(), new_link, &domain, -1000.0).await {
-                Ok(added) => if added { 
-                    added_links.push(new_link) 
-                }
-                Err(err) => warn!("Error while adding new followed link {}: {} (source: {:?})", new_link, err, err.source()),
-            }
+            link::add(redis_pool.clone(), new_link, &domain, new_priority, new_remaining_follows)
+                .await?;
+            added_links.push(new_link) 
         }
     }
 
     trace!("Followed {}/{} links from {}: {:?}", added_links.len(), new_links.len(), link, &added_links);
+
+    Ok(())
+}
+
+#[tracing::instrument(skip(sql_pool, redis_pool, client, semaphore))]
+pub async fn process(
+    sql_pool: Pool<MySql>, 
+    redis_pool: MultiplexedConnection, 
+    client: Client, 
+    semaphore: Arc<Semaphore>, 
+    link: String
+) {
+    let _permit = semaphore.acquire().await.unwrap();
+
+    // Download
+    let downloaded = process_download(redis_pool.clone(), client, link.clone())
+        .await;
+    if let Err(err) = downloaded {
+        debug!("Error downloading {}: {} (source: {:?})", &link, err, err.source());
+        return;
+    }
+    let downloaded = downloaded.unwrap();
+
+    // Extract
+    let extracted = process_extract(redis_pool.clone(), downloaded.clone(), link.clone())
+        .await;
+    if let Err(err) = extracted  {
+        warn!("Error extracting {}: {} (source: {:?})", &link, err, err.source());
+        return;
+    }
+    let extracted = extracted.unwrap();
+
+    // Parse
+    // (can't use map due to async closures being unstable)
+    let parsed = match extracted {
+        Some(extracted) => {
+            let parsed = process_parse(sql_pool.clone(), redis_pool.clone(), extracted, link.clone())
+                .await;
+            if let Err(err) = parsed  {
+                warn!("Error parsing {}: {} (source: {:?})", &link, err, err.source());
+                return;
+            }
+            Some(parsed.unwrap())
+        }
+        None => None
+    };
+
+    // Follow
+    let followed = process_follow(redis_pool.clone(), downloaded, parsed, link.clone())
+        .await;
+    if let Err(err) = followed  {
+        warn!("Error extracting {}: {} (source: {:?})", &link, err, err.source());
+        return;
+    }
 }
 
 pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy: String, certificates: Vec<Certificate>) {

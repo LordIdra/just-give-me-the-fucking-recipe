@@ -1,23 +1,10 @@
-use std::{error::Error, fmt};
-
 use regex::RegexBuilder;
 use serde_json::Value;
 
 use crate::BoxError;
 
-#[derive(Debug)]
-pub struct FailedToExtractSchema;
-
-impl fmt::Display for FailedToExtractSchema {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Failed to extract schema")
-    }
-}
-
-impl Error for FailedToExtractSchema  {}
-
 #[tracing::instrument(skip(contents))]
-pub async fn extract(contents: &str) -> Result<Value, BoxError> {
+pub async fn extract(contents: &str) -> Result<Option<Value>, BoxError> {
     let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
         .dot_matches_new_line(true)
         .build()
@@ -47,7 +34,7 @@ pub async fn extract(contents: &str) -> Result<Value, BoxError> {
     }
 
     let Some(mut schema) = schema else {
-        return Err(Box::new(FailedToExtractSchema));
+        return Ok(None);
     };
 
     if let Some(graph) = schema.get("@graph") {
@@ -58,13 +45,13 @@ pub async fn extract(contents: &str) -> Result<Value, BoxError> {
             );
 
             let Some(new_schema) = new_schema else {
-                return Err(Box::new(FailedToExtractSchema));
+                return Ok(None);
             };
 
             schema = new_schema.clone();
         }
     }
 
-    Ok(schema)
+    Ok(Some(schema))
 }
 

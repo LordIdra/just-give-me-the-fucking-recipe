@@ -93,7 +93,7 @@ async fn search(pool: MultiplexedConnection, client: Client, serper_key: String,
         };
 
         let priority = word::get_priority(pool.clone(), job).await?;
-        link::add(pool.clone(), &link.link, domain, priority).await?;
+        link::add(pool.clone(), &link.link, domain, priority, 1).await?;
     }
 
     trace!("Searched keyword '{}' and found: {:?}", job, link_names);
