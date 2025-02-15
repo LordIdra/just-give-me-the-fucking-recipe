@@ -7,7 +7,6 @@ r = redis.Redis(
 )
 
 keys = r.hkeys("link:status")
-print(keys)
 
 for key in keys:
     status = r.hget("link:status", key)
