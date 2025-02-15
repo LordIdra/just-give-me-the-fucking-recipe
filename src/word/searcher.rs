@@ -12,7 +12,7 @@ use crate::{link::{self}, word::{self, WordStatus}, BoxError, UnexpectedStatusCo
 
 const SERPER_API_URL: &str = "https://google.serper.dev/search";
 
-const MIN_DOMAINS_IN_SYSTEM: usize = 1000;
+const MIN_DOMAINS_IN_SYSTEM: usize = 500;
 
 #[derive(Debug, Serialize)]
 struct SerperRequest {
