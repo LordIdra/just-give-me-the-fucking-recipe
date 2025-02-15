@@ -11,15 +11,15 @@ keys = r.hkeys("link:status")
 for key in keys:
     status = r.hget("link:status", key)
 
-    if status == "waiting":
+    if status == b"waiting":
         pass
-    elif status == "processing":
+    elif status == b"processing":
         pass
-    elif status == "download_failed":
+    elif status == b"download_failed":
         pass
-    elif status == "extraction_failed":
+    elif status == b"extraction_failed":
         pass
-    elif status == "processed":
+    elif status == b"processed":
         pass
     else:
         print(status)
