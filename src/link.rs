@@ -513,7 +513,7 @@ pub async fn process(
     let followed = process_follow(redis_pool.clone(), downloaded, parsed, link.clone())
         .await;
     if let Err(err) = followed  {
-        warn!("Error extracting {}: {} (source: {:?})", &link, err, err.source());
+        warn!("Error following {}: {} (source: {:?})", &link, err, err.source());
         return;
     }
 }
