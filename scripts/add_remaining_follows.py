@@ -22,5 +22,5 @@ for key in keys:
     elif status == "processed":
         pass
     else:
-        print("bruh")
+        print(status)
 
