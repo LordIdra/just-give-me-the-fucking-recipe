@@ -88,7 +88,7 @@ fn key_link_to_domain() -> String {
 }
 
 fn key_link_to_remaining_follows() -> String {
-    "link:domain".to_string()
+    "link:remaining_follows".to_string()
 }
 
 fn key_link_to_content_size() -> String {
