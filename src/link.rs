@@ -455,9 +455,11 @@ pub async fn process_follow(
             .and_then(|url| url.domain().map(|domain| domain.to_owned()));
 
         if let Some(domain) = maybe_domain {
-            link::add(redis_pool.clone(), new_link, &domain, new_priority, new_remaining_follows)
+            let added = link::add(redis_pool.clone(), new_link, &domain, new_priority, new_remaining_follows)
                 .await?;
-            added_links.push(new_link) 
+            if added {
+                added_links.push(new_link) 
+            }
         }
     }
 
