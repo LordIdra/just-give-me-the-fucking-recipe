@@ -1,4 +1,5 @@
 /target
+/local
 run.sh
 brightdata.crt
 Cargo.lock
