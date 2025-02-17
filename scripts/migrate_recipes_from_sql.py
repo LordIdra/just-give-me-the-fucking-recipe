@@ -44,7 +44,8 @@ for row in result:
     sugar = str(row[18])
     id = str(row[19])
 
-    print(servings)
+    if servings == None:
+        print(servings)
 
     #r.zadd("word:words_by_status:" + status, { word: priority})
 
