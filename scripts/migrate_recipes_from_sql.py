@@ -19,7 +19,7 @@ r = redis.Redis(
 
 cursor = mydb.cursor()
 
-cursor.execute("SELECT link, title, description, date, rating, rating_count, prep_time_seconds, cook_time_seconds, total_time_seconds, servings, calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium, sugar, id FROM word")
+cursor.execute("SELECT link, title, description, date, rating, rating_count, prep_time_seconds, cook_time_seconds, total_time_seconds, servings, calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium, sugar, id FROM recipe")
 result = cursor.fetchall()
 
 for row in result:
