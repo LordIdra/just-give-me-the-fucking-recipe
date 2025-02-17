@@ -123,6 +123,8 @@ for row in result:
     r.sadd("recipe:keywords", keyword)
     r.sadd(f"recipe:{recipe_id}:keywords", keyword)
 
+print("finished migrating keywords")
+
 
 
 # TODO cleanup script
@@ -137,6 +139,8 @@ for row in result:
     r.sadd("recipe:authors", author)
     r.sadd(f"recipe:{recipe_id}:authors", author)
 
+print("finished migrating authors")
+
 
 
 # TODO cleanup script
@@ -149,6 +153,8 @@ for row in result:
     
     r.sadd("recipe:images", image)
     r.sadd(f"recipe:{recipe_id}:images", image)
+
+print("finished migrating images")
 
 
 
@@ -163,6 +169,8 @@ for row in result:
     r.sadd("recipe:ingredients", ingredient)
     r.sadd(f"recipe:{recipe_id}:ingredients", ingredient)
 
+print("finished migrating ingredients")
+
 
 
 # TODO cleanup script
@@ -175,3 +183,5 @@ for row in result:
     
     r.sadd("recipe:instructions", instruction)
     r.sadd(f"recipe:{recipe_id}:instructions", instruction)
+
+print("finished migrating instructions")
