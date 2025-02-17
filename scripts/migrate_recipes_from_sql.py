@@ -105,83 +105,83 @@ for row in result:
     if sodium != "None":
         r.hset("recipe:sodium", id, sodium)
     if sugar != "None":
-        r.hset("recipe:sodium", id, sugar)
+        r.hset("recipe:sugar", id, sugar)
 
 print("finished migrating main recipe table")
 
 
 
-# TODO cleanup script
-
-cursor.execute("SELECT recipe_keyword.recipe, keyword.keyword FROM keyword JOIN recipe_keyword on keyword.id = recipe_keyword.keyword")
-result = cursor.fetchall()
-
-for row in result:
-    recipe_id = str(row[0])
-    keyword = str(row[1])
-    
-    r.sadd("recipe:keywords", keyword)
-    r.sadd(f"recipe:{recipe_id}:keywords", keyword)
-
-print("finished migrating keywords")
-
-
-
-# TODO cleanup script
-
-cursor.execute("SELECT recipe_author.recipe, author.name FROM author JOIN recipe_author ON author.id = recipe_author.author")
-result = cursor.fetchall()
-
-for row in result:
-    recipe_id = str(row[0])
-    author = str(row[1])
-    
-    r.sadd("recipe:authors", author)
-    r.sadd(f"recipe:{recipe_id}:authors", author)
-
-print("finished migrating authors")
-
-
-
-# TODO cleanup script
-cursor.execute("SELECT recipe_image.recipe, image.image FROM image JOIN recipe_image ON image.id = recipe_image.image")
-result = cursor.fetchall()
-
-for row in result:
-    recipe_id = str(row[0])
-    image = str(row[1])
-    
-    r.sadd("recipe:images", image)
-    r.sadd(f"recipe:{recipe_id}:images", image)
-
-print("finished migrating images")
-
-
-
-# TODO cleanup script
-cursor.execute("SELECT recipe_ingredient.recipe, ingredient.ingredient FROM ingredient JOIN recipe_ingredient ON ingredient.id = recipe_ingredient.ingredient")
-result = cursor.fetchall()
-
-for row in result:
-    recipe_id = str(row[0])
-    ingredient = str(row[1])
-    
-    r.sadd("recipe:ingredients", ingredient)
-    r.sadd(f"recipe:{recipe_id}:ingredients", ingredient)
-
-print("finished migrating ingredients")
-
-
-
-# TODO cleanup script
-cursor.execute("SELECT recipe_instruction.recipe, instruction.instruction FROM instruction JOIN recipe_instruction ON instruction.id = recipe_instruction.instruction")
-result = cursor.fetchall()
-
-for row in result:
-    recipe_id = str(row[0])
-    instruction = str(row[1])
-    
-    r.sadd("recipe:instructions", instruction)
-    r.sadd(f"recipe:{recipe_id}:instructions", instruction)
-
-print("finished migrating instructions")
+## TODO cleanup script
+#
+#cursor.execute("SELECT recipe_keyword.recipe, keyword.keyword FROM keyword JOIN recipe_keyword on keyword.id = recipe_keyword.keyword")
+#result = cursor.fetchall()
+#
+#for row in result:
+#    recipe_id = str(row[0])
+#    keyword = str(row[1])
+#    
+#    r.sadd("recipe:keywords", keyword)
+#    r.sadd(f"recipe:{recipe_id}:keywords", keyword)
+#
+#print("finished migrating keywords")
+#
+#
+#
+## TODO cleanup script
+#
+#cursor.execute("SELECT recipe_author.recipe, author.name FROM author JOIN recipe_author ON author.id = recipe_author.author")
+#result = cursor.fetchall()
+#
+#for row in result:
+#    recipe_id = str(row[0])
+#    author = str(row[1])
+#    
+#    r.sadd("recipe:authors", author)
+#    r.sadd(f"recipe:{recipe_id}:authors", author)
+#
+#print("finished migrating authors")
+#
+#
+#
+## TODO cleanup script
+#cursor.execute("SELECT recipe_image.recipe, image.image FROM image JOIN recipe_image ON image.id = recipe_image.image")
+#result = cursor.fetchall()
+#
+#for row in result:
+#    recipe_id = str(row[0])
+#    image = str(row[1])
+#    
+#    r.sadd("recipe:images", image)
+#    r.sadd(f"recipe:{recipe_id}:images", image)
+#
+#print("finished migrating images")
+#
+#
+#
+## TODO cleanup script
+#cursor.execute("SELECT recipe_ingredient.recipe, ingredient.ingredient FROM ingredient JOIN recipe_ingredient ON ingredient.id = recipe_ingredient.ingredient")
+#result = cursor.fetchall()
+#
+#for row in result:
+#    recipe_id = str(row[0])
+#    ingredient = str(row[1])
+#    
+#    r.sadd("recipe:ingredients", ingredient)
+#    r.sadd(f"recipe:{recipe_id}:ingredients", ingredient)
+#
+#print("finished migrating ingredients")
+#
+#
+#
+## TODO cleanup script
+#cursor.execute("SELECT recipe_instruction.recipe, instruction.instruction FROM instruction JOIN recipe_instruction ON instruction.id = recipe_instruction.instruction")
+#result = cursor.fetchall()
+#
+#for row in result:
+#    recipe_id = str(row[0])
+#    instruction = str(row[1])
+#    
+#    r.sadd("recipe:instructions", instruction)
+#    r.sadd(f"recipe:{recipe_id}:instructions", instruction)
+#
+#print("finished migrating instructions")
