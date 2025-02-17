@@ -5,7 +5,7 @@ import tldextract
 
 mydb = mysql.connector.connect(
     host="localhost",
-    port=7712,
+    port=3306,
     user=sys.argv[1],
     password=sys.argv[2],
     database="recipe",
@@ -24,7 +24,7 @@ result = cursor.fetchall()
 
 for row in result:
     link = str(row[0])
-    title = row[1]
+    title = str(row[1])
     description = str(row[2])
     date = str(row[3])
     rating = str(row[4])
