@@ -2,13 +2,9 @@ use std::time::Duration;
 
 use log::{info, warn};
 use redis::aio::MultiplexedConnection;
-use sqlx::{query, query_as, FromRow, MySql, Pool};
 use tokio::time::interval;
 
 use crate::{link::{self, LinkStatus}, word::{self, WordStatus}, BoxError};
-
-#[derive(FromRow)]
-struct OneBigInt(i64);
 
 async fn fetch_count(pool: Pool<MySql>, table: &str) -> Result<i64, BoxError> {
     Ok(query_as::<_, OneBigInt>(&format!("SELECT COUNT(*) FROM {table}"))

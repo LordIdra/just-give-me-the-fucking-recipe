@@ -38,8 +38,14 @@ struct SiteLink {
     link: String,
 }
 
-#[tracing::instrument(skip(pool, client, serper_key))]
-async fn search(pool: MultiplexedConnection, client: Client, serper_key: String, job: &str) -> Result<(), BoxError> {
+#[tracing::instrument(skip(redis_words, client, serper_key))]
+async fn search(
+    redis_words: MultiplexedConnection, 
+    redis_links: MultiplexedConnection,
+    client: Client, 
+    serper_key: String, 
+    job: &str
+) -> Result<(), BoxError> {
     let query = job.to_string() + " recipe";
     let mut headers = HeaderMap::new();
     headers.insert("X-API-KEY", serper_key.parse().unwrap());
@@ -92,18 +98,18 @@ async fn search(pool: MultiplexedConnection, client: Client, serper_key: String,
             continue;
         };
 
-        let priority = word::get_priority(pool.clone(), job).await?;
-        link::add(pool.clone(), &link.link, domain, priority, 1).await?;
+        let priority = word::get_priority(redis_words.clone(), job).await?;
+        link::add(redis_links.clone(), &link.link, domain, priority, 1).await?;
     }
 
     trace!("Searched keyword '{}' and found: {:?}", job, link_names);
 
-    word::update_status(pool, job, word::WordStatus::SearchComplete).await?;
+    word::update_status(redis_words, job, word::WordStatus::SearchComplete).await?;
 
     Ok(())
 }
 
-pub async fn run(redis_pool: MultiplexedConnection, serper_key: String) {
+pub async fn run(redis_words: MultiplexedConnection, redis_links: MultiplexedConnection, serper_key: String) {
     info!("Started searcher");
 
     let client = Client::new();
@@ -115,7 +121,7 @@ pub async fn run(redis_pool: MultiplexedConnection, serper_key: String) {
     loop {
         interval.tick().await;
 
-        let current_domains_waiting_for_processing = link::domains_in_system(redis_pool.clone()).await;
+        let current_domains_waiting_for_processing = link::domains_in_system(redis_links.clone()).await;
         if let Err(err) = current_domains_waiting_for_processing {
             warn!("Error while getting words with status WAITING_FOR_PROCESSING: {} (source: {:?})", err, err.source());
             continue;
@@ -130,7 +136,7 @@ pub async fn run(redis_pool: MultiplexedConnection, serper_key: String) {
                 break
             }
 
-            let next_job = word::next_job(redis_pool.clone(), WordStatus::WaitingForSearch, WordStatus::SearchComplete).await;
+            let next_job = word::next_job(redis_words.clone(), WordStatus::WaitingForSearch, WordStatus::SearchComplete).await;
             if let Err(err) = next_job {
                 warn!("Error while getting next job: {}", err);
                 break;
@@ -143,13 +149,14 @@ pub async fn run(redis_pool: MultiplexedConnection, serper_key: String) {
             let sempahore = semaphore.clone();
             let client = client.clone();
             let serper_key = serper_key.clone();
-            let redis_pool = redis_pool.clone();
+            let redis_words = redis_words.clone();
+            let redis_links = redis_links.clone();
 
             tokio::spawn(async move {
                 let _permit = sempahore.acquire().await.unwrap();
-                if let Err(err) = search(redis_pool.clone(), client, serper_key, &next_job).await {
+                if let Err(err) = search(redis_words.clone(), redis_links.clone(), client, serper_key, &next_job).await {
                     warn!("Searcher encountered error on word '{}': {} (source: {:?})", next_job, err, err.source());
-                    if let Err(err) = word::update_status(redis_pool, &next_job, WordStatus::SearchFailed).await {
+                    if let Err(err) = word::update_status(redis_words, &next_job, WordStatus::SearchFailed).await {
                         warn!("Error while setting status to failed on word '{}': {} (source: {:?})", next_job, err, err.source());
                     }
                 }

@@ -1,7 +1,6 @@
-use std::fs::File;
+use std::fmt;
+use std::{error::Error, fs::File};
 use std::io::Read;
-use std::time::Duration;
-use std::{error::Error, fmt};
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
@@ -9,17 +8,17 @@ use log::{info, trace, warn};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
-use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use tokio::net::TcpListener;
-use tracing_subscriber::{EnvFilter, Layer};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use word::{classifier, generator, WordStatus};
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use word::{classifier, generator, searcher, WordStatus};
 
 mod gpt;
 mod link;
 mod link_blacklist;
 mod recipe;
-mod statistic;
+//mod statistic;
 mod word;
 
 type BoxError = Box<dyn Error + Send>;
@@ -57,14 +56,13 @@ struct Args {
 }
 
 #[derive(Debug, Clone)]
-struct AppState {
-    #[allow(unused)]
-    sql_pool: Pool<MySql>,
+pub struct AppState {
     redis_words: MultiplexedConnection,
     #[allow(unused)]
     redis_links: MultiplexedConnection,
     #[allow(unused)]
     redis_recipes: MultiplexedConnection,
+    //redis_statistics: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -88,14 +86,6 @@ async fn main() {
         .unwrap();
 
     let certificates = Certificate::from_pem_bundle(&buf).unwrap();
-    
-    let sql_pool = MySqlPoolOptions::new()
-        .test_before_acquire(true)
-        .max_connections(200)
-        .acquire_timeout(Duration::from_secs(2))
-        .connect(&args.database_url)
-        .await
-        .expect("Failed to connect to database");
 
     let redis_words = redis::Client::open("redis://127.0.0.1:6380")
         .unwrap()
@@ -115,20 +105,26 @@ async fn main() {
         .await
         .unwrap();
 
+    //let redis_statistics = redis::Client::open("redis://127.0.0.1:6383")
+    //    .unwrap()
+    //    .get_multiplexed_tokio_connection()
+    //    .await
+    //    .unwrap();
+
     word::reset_tasks(redis_words.clone()).await.expect("Failed to reset word tasks");
     link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
 
     tokio::spawn(classifier::run(redis_words.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(redis_words.clone(), args.openai_key));
-    tokio::spawn(searcher::run(redis_pool.clone(), args.serper_key));
-    tokio::spawn(link::run(redis_links.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), sql_pool.clone()));
+    tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
+    tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
+    //tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), redis_statistics.clone()));
 
     let state = AppState {
-        sql_pool,
         redis_words,
         redis_links,
         redis_recipes,
+        //redis_statistics,
     };
     
     let app = Router::new()

@@ -146,88 +146,88 @@ pub async fn add(
     Ok(true)
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_status(mut pool: MultiplexedConnection, link: &str) -> Result<LinkStatus, BoxError> {
-    let status: String = pool.hget(key_link_to_status(), link)
+pub async fn get_status(mut redis_links: MultiplexedConnection, link: &str) -> Result<LinkStatus, BoxError> {
+    let status: String = redis_links.hget(key_link_to_status(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(LinkStatus::from_string(&status).unwrap())
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_priority(mut redis_pool: MultiplexedConnection, link: &str) -> Result<f32, BoxError> {
-    let priority: f32 = redis_pool.hget(key_link_to_priority(), link)
+pub async fn get_priority(mut redis_links: MultiplexedConnection, link: &str) -> Result<f32, BoxError> {
+    let priority: f32 = redis_links.hget(key_link_to_priority(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(priority)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_domain(mut redis_pool: MultiplexedConnection, link: &str) -> Result<String, BoxError> {
-    let domain: String = redis_pool.hget(key_link_to_domain(), link)
+pub async fn get_domain(mut redis_links: MultiplexedConnection, link: &str) -> Result<String, BoxError> {
+    let domain: String = redis_links.hget(key_link_to_domain(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(domain)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_remaining_follows(mut redis_pool: MultiplexedConnection, link: &str) -> Result<i32, BoxError> {
-    let remaining_follows: i32 = redis_pool.hget(key_link_to_remaining_follows(), link)
+pub async fn get_remaining_follows(mut redis_links: MultiplexedConnection, link: &str) -> Result<i32, BoxError> {
+    let remaining_follows: i32 = redis_links.hget(key_link_to_remaining_follows(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(remaining_follows)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn set_content_size(mut redis_pool: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), BoxError> {
-    let _: () = redis_pool.hset(key_link_to_content_size(), link, content_size)
+pub async fn set_content_size(mut redis_links: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), BoxError> {
+    let _: () = redis_links.hset(key_link_to_content_size(), link, content_size)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(())
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn links_with_status(mut redis_pool: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
-    let count: usize = redis_pool.zcard(key_status_to_links(status))
+pub async fn links_with_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
+    let count: usize = redis_links.zcard(key_status_to_links(status))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(count)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn total_content_size(mut redis_pool: MultiplexedConnection) -> Result<u64, BoxError> {
-    let sizes: Vec<String> = redis_pool.hvals(key_link_to_content_size())
+pub async fn total_content_size(mut redis_links: MultiplexedConnection) -> Result<u64, BoxError> {
+    let sizes: Vec<String> = redis_links.hvals(key_link_to_content_size())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(sizes.iter().filter_map(|v| v.parse::<u64>().ok()).sum())
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize) -> Result<Vec<String>, BoxError> {
-    let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_pool)
+pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize) -> Result<Vec<String>, BoxError> {
+    let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_links)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     let mut futures = JoinSet::new();
     for domain in next_domains {
-        let redis_pool = redis_pool.clone();
+        let redis_links = redis_links.clone();
         futures.spawn(async move {
-            redis_pool.clone().zpopmax::<_, Vec<String>>(key_domain_to_waiting_links(&domain), 1).await
+            redis_links.clone().zpopmax::<_, Vec<String>>(key_domain_to_waiting_links(&domain), 1).await
         });
     }
     let next_links: Vec<String> = futures.join_all()
@@ -241,9 +241,9 @@ pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize)
 
     let mut futures = JoinSet::new();
     for link in next_links.clone() {
-        let redis_pool = redis_pool.clone();
+        let redis_links = redis_links.clone();
         futures.spawn(async move {
-            update_status(redis_pool.clone(), &link, LinkStatus::Processing).await
+            update_status(redis_links.clone(), &link, LinkStatus::Processing).await
         });
     }
     futures.join_all()
@@ -254,35 +254,35 @@ pub async fn poll_next_jobs(mut redis_pool: MultiplexedConnection, count: usize)
     Ok(next_links)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn is_domain_waiting(mut redis_pool: MultiplexedConnection, domain: &str) -> Result<bool, BoxError> {
-    let exists: bool = redis_pool.exists(key_domain_to_waiting_links(domain))
+pub async fn is_domain_waiting(mut redis_links: MultiplexedConnection, domain: &str) -> Result<bool, BoxError> {
+    let exists: bool = redis_links.exists(key_domain_to_waiting_links(domain))
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     Ok(exists)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn domains_in_system(mut redis_pool: MultiplexedConnection) -> Result<usize, BoxError> {
-    let processing: usize = redis_pool.scard(key_processing_domains())
+pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result<usize, BoxError> {
+    let processing: usize = redis_links.scard(key_processing_domains())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
-    let waiting: usize = redis_pool.scard(key_waiting_domains())
+    let waiting: usize = redis_links.scard(key_waiting_domains())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
     Ok(processing + waiting)
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), BoxError> {
-    let previous_status = get_status(redis_pool.clone(), link)
+pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), BoxError> {
+    let previous_status = get_status(redis_links.clone(), link)
         .await?;
-    let priority = get_priority(redis_pool.clone(), link)
+    let priority = get_priority(redis_links.clone(), link)
         .await?;
-    let domain = get_domain(redis_pool.clone(), link)
+    let domain = get_domain(redis_links.clone(), link)
         .await?;
 
     let mut pipe = redis::pipe();
@@ -298,7 +298,7 @@ pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, st
         pipe.zrem(key_domain_to_waiting_links(&domain), link);
     }
 
-    pipe.exec_async(&mut redis_pool)
+    pipe.exec_async(&mut redis_links)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -311,39 +311,39 @@ pub async fn update_status(mut redis_pool: MultiplexedConnection, link: &str, st
 
     if previous_status == LinkStatus::Processing {
         pipe.srem(key_processing_domains(), domain.clone());
-        if is_domain_waiting(redis_pool.clone(), &domain).await? {
+        if is_domain_waiting(redis_links.clone(), &domain).await? {
             pipe.sadd(key_waiting_domains(), domain.clone());
         }
     }
 
-    pipe.exec_async(&mut redis_pool)
+    pipe.exec_async(&mut redis_links)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(())
 }
 
-#[tracing::instrument(skip(redis_pool))]
+#[tracing::instrument(skip(redis_links))]
 #[must_use]
-async fn exists(mut redis_pool: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
-    let exists: bool = redis_pool.hexists(key_link_to_status(), link)
+async fn exists(mut redis_links: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
+    let exists: bool = redis_links.hexists(key_link_to_status(), link)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
     Ok(exists)
 }
 
-#[tracing::instrument(skip(redis_pool, client))]
+#[tracing::instrument(skip(redis_links, client))]
 pub async fn process_download(
-    redis_pool: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
     client: Client, 
     link: String
 ) -> Result<String, BoxError> {
-    let downloaded = downloader::download(redis_pool.clone(), client, link.clone())
+    let downloaded = downloader::download(redis_links.clone(), client, link.clone())
         .await;
 
     if let Err(err) = downloaded {
-        update_status(redis_pool.clone(), &link, LinkStatus::DownloadFailed)
+        update_status(redis_links.clone(), &link, LinkStatus::DownloadFailed)
             .await?;
         return Err(err)
     }
@@ -351,9 +351,9 @@ pub async fn process_download(
     Ok(downloaded.unwrap())
 }
 
-#[tracing::instrument(skip(redis_pool, contents))]
+#[tracing::instrument(skip(redis_links, contents))]
 pub async fn process_extract(
-    redis_pool: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
     contents: String,
     link: String
 ) -> Result<Option<Value>, BoxError> {
@@ -361,9 +361,9 @@ pub async fn process_extract(
         .await;
 
     if let Err(err) = extracted {
-        update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed)
+        update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed)
             .await?;
-        set_content_size(redis_pool.clone(), &link, contents.len())
+        set_content_size(redis_links.clone(), &link, contents.len())
             .await?;
         return Err(err);
     }
@@ -371,9 +371,9 @@ pub async fn process_extract(
     let extracted = extracted.unwrap();
 
     if extracted.is_none() {
-        update_status(redis_pool.clone(), &link, LinkStatus::ExtractionFailed)
+        update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed)
             .await?;
-        set_content_size(redis_pool.clone(), &link, contents.len())
+        set_content_size(redis_links.clone(), &link, contents.len())
             .await?;
         return Ok(None);
     }
@@ -381,14 +381,15 @@ pub async fn process_extract(
     Ok(extracted)
 }
 
-#[tracing::instrument(skip(redis_pool, schema))]
+#[tracing::instrument(skip(redis_links, redis_recipes, schema))]
 pub async fn process_parse(
-    redis_pool: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
+    redis_recipes: MultiplexedConnection, 
     schema: Value,
     link: String
 ) -> Result<Option<Recipe>, BoxError> {
     // Set to processed now rather than after following to avoid duplicate recipes appearing
-    update_status(redis_pool.clone(), &link, LinkStatus::Processed)
+    update_status(redis_links.clone(), &link, LinkStatus::Processed)
         .await?;
 
     let parsed = parser::parse(link.to_string(), schema)
@@ -399,7 +400,7 @@ pub async fn process_parse(
         return Ok(None);
     };
 
-    recipe::add(redis_pool, parsed.clone())
+    recipe::add(redis_recipes, parsed.clone())
         .await?;
 
     trace!("Parsed recipe from {}", link);
@@ -407,9 +408,9 @@ pub async fn process_parse(
     Ok(Some(parsed))
 }
 
-#[tracing::instrument(skip(redis_pool, contents, recipe))]
+#[tracing::instrument(skip(redis_links, contents, recipe))]
 pub async fn process_follow(
-    redis_pool: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
     contents: String,
     recipe: Option<Recipe>,
     link: String
@@ -418,7 +419,7 @@ pub async fn process_follow(
     let recipe_is_complete = recipe.as_ref().is_some_and(|recipe| recipe.is_complete());
 
     // Remaining follows
-    let remaining_follows = get_remaining_follows(redis_pool.clone(), &link)
+    let remaining_follows = get_remaining_follows(redis_links.clone(), &link)
         .await?;
     if remaining_follows <= 0 && !recipe_is_complete {
         trace!("Terminated follow for {}", link);
@@ -452,7 +453,7 @@ pub async fn process_follow(
             .and_then(|url| url.domain().map(|domain| domain.to_owned()));
 
         if let Some(domain) = maybe_domain {
-            let added = link::add(redis_pool.clone(), new_link, &domain, new_priority, new_remaining_follows)
+            let added = link::add(redis_links.clone(), new_link, &domain, new_priority, new_remaining_follows)
                 .await?;
             if added {
                 added_links.push(new_link) 
@@ -465,9 +466,10 @@ pub async fn process_follow(
     Ok(())
 }
 
-#[tracing::instrument(skip(redis_pool, client, semaphore))]
+#[tracing::instrument(skip(redis_links, redis_recipes, client, semaphore))]
 pub async fn process(
-    redis_pool: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
+    redis_recipes: MultiplexedConnection, 
     client: Client, 
     semaphore: Arc<Semaphore>, 
     link: String
@@ -475,7 +477,7 @@ pub async fn process(
     let _permit = semaphore.acquire().await.unwrap();
 
     // Download
-    let downloaded = process_download(redis_pool.clone(), client, link.clone())
+    let downloaded = process_download(redis_links.clone(), client, link.clone())
         .await;
     if let Err(err) = downloaded {
         debug!("Error downloading {}: {} (source: {:?})", &link, err, err.source());
@@ -484,7 +486,7 @@ pub async fn process(
     let downloaded = downloaded.unwrap();
 
     // Extract
-    let extracted = process_extract(redis_pool.clone(), downloaded.clone(), link.clone())
+    let extracted = process_extract(redis_links.clone(), downloaded.clone(), link.clone())
         .await;
     if let Err(err) = extracted  {
         warn!("Error extracting {}: {} (source: {:?})", &link, err, err.source());
@@ -496,7 +498,7 @@ pub async fn process(
     // (can't use map due to async closures being unstable)
     let parsed = match extracted {
         Some(extracted) => {
-            let parsed = process_parse(redis_pool.clone(), extracted, link.clone())
+            let parsed = process_parse(redis_links.clone(), redis_recipes, extracted, link.clone())
                 .await;
             if let Err(err) = parsed  {
                 warn!("Error parsing {}: {} (source: {:?})", &link, err, err.source());
@@ -508,7 +510,7 @@ pub async fn process(
     };
 
     // Follow
-    let followed = process_follow(redis_pool.clone(), downloaded, parsed, link.clone())
+    let followed = process_follow(redis_links.clone(), downloaded, parsed, link.clone())
         .await;
     if let Err(err) = followed  {
         warn!("Error following {}: {} (source: {:?})", &link, err, err.source());
@@ -516,7 +518,12 @@ pub async fn process(
     }
 }
 
-pub async fn run(redis_pool: MultiplexedConnection, proxy: String, certificates: Vec<Certificate>) {
+pub async fn run(
+    redis_links: MultiplexedConnection, 
+    redis_recipes: MultiplexedConnection, 
+    proxy: String, 
+    certificates: Vec<Certificate>
+) {
     info!("Started processor");
 
     let mut builder = ClientBuilder::new()
@@ -537,14 +544,14 @@ pub async fn run(redis_pool: MultiplexedConnection, proxy: String, certificates:
             continue;
         }
 
-        let links_result = poll_next_jobs(redis_pool.clone(), semaphore.available_permits()).await;
+        let links_result = poll_next_jobs(redis_links.clone(), semaphore.available_permits()).await;
         if let Err(err) = links_result {
             warn!("Error while getting next job: {} (source: {:?})", err, err.source());
             continue;
         }
 
         for link in links_result.unwrap() {
-            tokio::spawn(process(redis_pool.clone(), client.clone(), semaphore.clone(), link));
+            tokio::spawn(process(redis_links.clone(), redis_recipes.clone(), client.clone(), semaphore.clone(), link));
         }
     }
 }
