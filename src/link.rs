@@ -5,7 +5,6 @@ use redis::{aio::MultiplexedConnection, AsyncCommands};
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{MySql, Pool};
 use tokio::{sync::Semaphore, task::JoinSet, time::interval};
 use url::Url;
 
@@ -101,8 +100,8 @@ pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError
     let processing: Vec<String> = pool.zrange(key_status_to_links(LinkStatus::Processing), 0, -1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
-    for word in processing {
-        update_status(pool.clone(), &word, LinkStatus::Waiting).await?;
+    for link in processing {
+        update_status(pool.clone(), &link, LinkStatus::Waiting).await?;
     }
 
     Ok(())
@@ -382,13 +381,12 @@ pub async fn process_extract(
     Ok(extracted)
 }
 
-#[tracing::instrument(skip(sql_pool, redis_pool, schema))]
+#[tracing::instrument(skip(redis_pool, schema))]
 pub async fn process_parse(
-    sql_pool: Pool<MySql>,
     redis_pool: MultiplexedConnection, 
     schema: Value,
     link: String
-) -> Result<Recipe, BoxError> {
+) -> Result<Option<Recipe>, BoxError> {
     // Set to processed now rather than after following to avoid duplicate recipes appearing
     update_status(redis_pool.clone(), &link, LinkStatus::Processed)
         .await?;
@@ -396,18 +394,17 @@ pub async fn process_parse(
     let parsed = parser::parse(link.to_string(), schema)
         .await;
 
-    if parsed.should_add() {
-        recipe::add(sql_pool.clone(), parsed.clone())
-            .await?;
-    }
+    let Some(parsed) = parsed else {
+        trace!("Failed to parse recipe from {}", link);
+        return Ok(None);
+    };
 
-    if !parsed.is_complete() {
-        trace!("Parsed incomplete recipe from {}", link);
-    } else {
-        trace!("Parsed complete recipe from {}", link);
-    }
+    recipe::add(redis_pool, parsed.clone())
+        .await?;
 
-    Ok(parsed)
+    trace!("Parsed recipe from {}", link);
+
+    Ok(Some(parsed))
 }
 
 #[tracing::instrument(skip(redis_pool, contents, recipe))]
@@ -417,7 +414,7 @@ pub async fn process_follow(
     recipe: Option<Recipe>,
     link: String
 ) -> Result<(), BoxError> {
-    let recipe_should_add = recipe.as_ref().is_some_and(|recipe| recipe.should_add());
+    let recipe_exists = recipe.is_some();
     let recipe_is_complete = recipe.as_ref().is_some_and(|recipe| recipe.is_complete());
 
     // Remaining follows
@@ -430,7 +427,7 @@ pub async fn process_follow(
 
     let new_remaining_follows = if recipe_is_complete {
         2
-    } else if recipe_should_add {
+    } else if recipe_exists {
         1
     } else {
         remaining_follows - 1
@@ -439,7 +436,7 @@ pub async fn process_follow(
     // Priority
     let new_priority = if recipe_is_complete {
         0.0
-    } else if recipe_should_add {
+    } else if recipe_exists {
         -1.0
     } else {
         -2.0
@@ -468,9 +465,8 @@ pub async fn process_follow(
     Ok(())
 }
 
-#[tracing::instrument(skip(sql_pool, redis_pool, client, semaphore))]
+#[tracing::instrument(skip(redis_pool, client, semaphore))]
 pub async fn process(
-    sql_pool: Pool<MySql>, 
     redis_pool: MultiplexedConnection, 
     client: Client, 
     semaphore: Arc<Semaphore>, 
@@ -500,13 +496,13 @@ pub async fn process(
     // (can't use map due to async closures being unstable)
     let parsed = match extracted {
         Some(extracted) => {
-            let parsed = process_parse(sql_pool.clone(), redis_pool.clone(), extracted, link.clone())
+            let parsed = process_parse(redis_pool.clone(), extracted, link.clone())
                 .await;
             if let Err(err) = parsed  {
                 warn!("Error parsing {}: {} (source: {:?})", &link, err, err.source());
                 return;
             }
-            Some(parsed.unwrap())
+            parsed.unwrap()
         }
         None => None
     };
@@ -520,7 +516,7 @@ pub async fn process(
     }
 }
 
-pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy: String, certificates: Vec<Certificate>) {
+pub async fn run(redis_pool: MultiplexedConnection, proxy: String, certificates: Vec<Certificate>) {
     info!("Started processor");
 
     let mut builder = ClientBuilder::new()
@@ -548,7 +544,7 @@ pub async fn run(sql_pool: Pool<MySql>, redis_pool: MultiplexedConnection, proxy
         }
 
         for link in links_result.unwrap() {
-            tokio::spawn(process(sql_pool.clone(), redis_pool.clone(), client.clone(), semaphore.clone(), link));
+            tokio::spawn(process(redis_pool.clone(), client.clone(), semaphore.clone(), link));
         }
     }
 }

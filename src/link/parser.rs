@@ -5,7 +5,7 @@ use regex::Regex;
 use serde_json::Value;
 use url::Url;
 
-use crate::recipe::{Nutrition, Recipe};
+use crate::recipe::Recipe;
 
 fn title(v: &Value) -> Option<String> {
     v.get("name")
@@ -288,80 +288,118 @@ fn keywords(v: &Value) -> Vec<String> {
     keywords
 }
 
-fn nutrition(v: &Value) -> Nutrition {
-    let Some(v) = v.get("nutrition") else {
-        return Nutrition::default()
-    };
+fn calories(v: &Value) -> Option<f32> {
+    v.get("calories")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("kcal", ""))
+        .map(|v| v.replace("calories", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
 
-    Nutrition {
-        calories: v.get("calories")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("kcal", ""))
-            .map(|v| v.replace("calories", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        carbohydrates: v.get("carbohydrateContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        cholesterol: v.get("cholesterolContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("mg", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        fat: v.get("fatContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        fiber: v.get("fiberContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        protein: v.get("proteinContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        saturated_fat: v.get("saturatedFatContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        sodium: v.get("sodiumContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("mg", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-        sugar: v.get("sugarContent")
-            .and_then(|v| v.as_str())
-            .map(|v| v.replace("g", ""))
-            .map(|v| v.trim().to_owned())
-            .and_then(|v| v.parse::<f32>().ok()),
-    }
+fn carbohydrates(v: &Value) -> Option<f32> {
+    v.get("carbohydrateContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn cholesterol(v: &Value) -> Option<f32> {
+    v.get("cholesterolContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("mg", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn fat(v: &Value) -> Option<f32> {
+    v.get("fatContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn fiber(v: &Value) -> Option<f32> {
+    v.get("fiberContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn protein(v: &Value) -> Option<f32> {
+    v.get("proteinContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn saturated_fat(v: &Value) -> Option<f32> {
+    v.get("saturatedFatContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())}
+
+fn sodium(v: &Value) -> Option<f32> {
+    v.get("sodiumContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("mg", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
+}
+
+fn sugar(v: &Value) -> Option<f32> {
+    v.get("sugarContent")
+        .and_then(|v| v.as_str())
+        .map(|v| v.replace("g", ""))
+        .map(|v| v.trim().to_owned())
+        .and_then(|v| v.parse::<f32>().ok())
 }
 
 #[tracing::instrument(skip(schema))]
-pub async fn parse(link: String, schema: Value) -> Recipe {
-    Recipe {
+pub async fn parse(link: String, schema: Value) -> Option<Recipe> {
+    let title = title(&schema)?;
+    let description = description(&schema)?;
+
+    let ingredients = ingredients(&schema);
+    if ingredients.is_empty() {
+        return None;
+    }
+
+    let instructions = instructions (&schema);
+    if instructions.is_empty() {
+        return None;
+    }
+
+    Some(Recipe {
         link: link.clone(),
-        title: title(&schema),
+        title,
+        ingredients,
+        instructions,
         images: image(&schema),
         authors: authors(&schema, link.to_owned()),
-        description: description(&schema),
+        description,
         date: date(&schema),
         servings: servings(&schema),
         prep_time_seconds: prep_time(&schema),
         cook_time_seconds: cook_time(&schema),
         total_time_seconds: total_time(&schema).or_else(|| Some(prep_time(&schema)? + cook_time(&schema)?)),
-        ingredients: ingredients(&schema),
-        instructions: instructions(&schema),
         rating: rating(&schema),
         rating_count: rating_count(&schema),
         keywords: keywords(&schema),
-        nutrition: nutrition(&schema),
-    }
+        calories: calories(&schema),
+        carbohydrates: carbohydrates(&schema),
+        cholesterol: cholesterol(&schema),
+        fat: fat(&schema),
+        fiber: fiber(&schema),
+        protein: protein(&schema),
+        saturated_fat: saturated_fat(&schema),
+        sodium: sodium(&schema),
+        sugar: sugar(&schema),
+    })
 }
 

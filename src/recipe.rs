@@ -1,18 +1,17 @@
 use std::time::Duration;
 
 use chrono::NaiveDate;
-use sqlx::{prelude::FromRow, query, query_as, MySql, Pool};
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 
 use crate::BoxError;
-
-#[derive(FromRow)]
-struct Id(i32);
 
 #[derive(Debug, Clone)]
 pub struct Recipe {
     pub link: String,
-    pub title: Option<String>,
-    pub description: Option<String>,
+    pub title: String,
+    pub description: String,
+    pub ingredients: Vec<String>,
+    pub instructions: Vec<String>,
     pub date: Option<NaiveDate>,
     pub keywords: Vec<String>,
     pub authors: Vec<String>,
@@ -23,34 +22,6 @@ pub struct Recipe {
     pub cook_time_seconds: Option<Duration>,
     pub total_time_seconds: Option<Duration>,
     pub servings: Option<String>,
-    pub ingredients: Vec<String>,
-    pub instructions: Vec<String>,
-    pub nutrition: Nutrition,
-}
-
-impl Recipe {
-    pub fn is_complete(&self) -> bool {
-        self.title.is_some()
-            && !self.images.is_empty()
-            && !self.authors.is_empty()
-            && self.description.is_some()
-            && self.date.is_some()
-            && self.servings.is_some()
-            && self.total_time_seconds.is_some()
-            && !self.ingredients.is_empty()
-            && self.rating.is_some()
-            && self.rating_count.is_some()
-            && !self.keywords.is_empty()
-            && self.nutrition.is_complete()
-    }
-
-    pub fn should_add(&self) -> bool {
-        !self.ingredients.is_empty()
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct Nutrition {
     pub calories: Option<f32>,
     pub carbohydrates: Option<f32>,
     pub cholesterol: Option<f32>,
@@ -62,9 +33,18 @@ pub struct Nutrition {
     pub sugar: Option<f32>,
 }
 
-impl Nutrition {
+impl Recipe {
     pub fn is_complete(&self) -> bool {
-        self.calories.is_some()
+        !self.images.is_empty()
+            && !self.authors.is_empty()
+            && self.date.is_some()
+            && self.servings.is_some()
+            && self.total_time_seconds.is_some()
+            && !self.ingredients.is_empty()
+            && self.rating.is_some()
+            && self.rating_count.is_some()
+            && !self.keywords.is_empty()
+            && self.calories.is_some()
             && self.carbohydrates.is_some()
             && self.cholesterol.is_some()
             && self.fat.is_some()
@@ -76,158 +56,203 @@ impl Nutrition {
     }
 }
 
+fn key_next_id() -> String {
+    "recipe:id_counter".to_string()
+}
+
+fn key_recipes() -> String {
+    "recipe:recipes".to_string()
+}
+
+fn key_recipe_link(id: usize) -> String {
+    format!("recipe:{id}:link")
+}
+
+fn key_recipe_title(id: usize) -> String {
+    format!("recipe:{id}:title")
+}
+
+fn key_title_recipes(title: &str) -> String {
+    format!("title:{title}:titles")
+}
+
+fn key_recipe_description(id: usize) -> String {
+    format!("recipe:{id}:description")
+}
+
+fn key_description_recipes(description: &str) -> String {
+    format!("description:{description}:recipes")
+}
+
+fn key_recipe_date(id: usize) -> String {
+    format!("recipe:{id}:date")
+}
+
+fn key_recipe_rating(id: usize) -> String {
+    format!("recipe:{id}:rating")
+}
+
+fn key_recipe_rating_count(id: usize) -> String {
+    format!("recipe:{id}:rating_count")
+}
+
+fn key_recipe_prep_time_seconds(id: usize) -> String {
+    format!("recipe:{id}:prep_time_seconds")
+}
+
+fn key_recipe_cook_time_seconds(id: usize) -> String {
+    format!("recipe:{id}:cook_time_seconds")
+}
+
+fn key_recipe_total_time_seconds(id: usize) -> String {
+    format!("recipe:{id}:total_time_seconds")
+}
+
+fn key_recipe_servings(id: usize) -> String {
+    format!("recipe:{id}:key_servings")
+}
+
+fn key_recipe_calories(id: usize) -> String {
+    format!("recipe:{id}:calories")
+}
+
+fn key_recipe_carbohydrates(id: usize) -> String {
+    format!("recipe:{id}:carbohydrates")
+}
+
+fn key_recipe_cholesterol(id: usize) -> String {
+    format!("recipe:{id}:cholesterol")
+}
+
+fn key_recipe_fat(id: usize) -> String {
+    format!("recipe:{id}:fat")
+}
+
+fn key_recipe_fiber(id: usize) -> String {
+    format!("recipe:{id}:fiber")
+}
+
+fn key_recipe_protein(id: usize) -> String {
+    format!("recipe:{id}:protein")
+}
+
+fn key_recipe_saturated_fat(id: usize) -> String {
+    format!("recipe:{id}:saturated_fat")
+}
+
+fn key_recipe_sodium(id: usize) -> String {
+    format!("recipe:{id}:sodium")
+}
+
+fn key_recipe_sugar(id: usize) -> String {
+    format!("recipe:{id}:sugar")
+}
+
+fn key_recipe_keywords(id: usize) -> String {
+    format!("recipe:{id}:keywords")
+}
+
+fn key_recipe_authors(id: usize) -> String {
+    format!("recipe:{id}:authors")
+}
+
+fn key_recipe_images(id: usize) -> String {
+    format!("recipe:{id}:images")
+}
+
+fn key_recipe_ingredients(id: usize) -> String {
+    format!("recipe:{id}:ingredients")
+}
+
+fn key_recipe_instructions(id: usize) -> String {
+    format!("recipe:{id}:ingredients")
+}
+
 /// Returns true if added
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(pool: Pool<MySql>, recipe: Recipe) -> Result<bool, BoxError> {
+pub async fn add(mut pool: MultiplexedConnection, recipe: Recipe) -> Result<bool, BoxError> {
     if exists(pool.clone(), &recipe).await? {
         return Ok(false);
     }
 
-    let recipe_id = query("INSERT INTO recipe (
-link, title, description, date, servings, prep_time_seconds, cook_time_seconds, total_time_seconds, rating, rating_count, 
-calories, carbohydrates, cholesterol, fat, fiber, protein, saturated_fat, sodium, sugar
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(recipe.link)
-        .bind(recipe.title)
-        .bind(&recipe.description)
-        .bind(recipe.date)
-        .bind(recipe.servings)
-        .bind(recipe.prep_time_seconds.map(|duration| duration.as_secs()))
-        .bind(recipe.cook_time_seconds.map(|duration| duration.as_secs()))
-        .bind(recipe.total_time_seconds.map(|duration| duration.as_secs()))
-        .bind(recipe.rating)
-        .bind(recipe.rating_count)
-        .bind(recipe.nutrition.calories)
-        .bind(recipe.nutrition.carbohydrates)
-        .bind(recipe.nutrition.cholesterol)
-        .bind(recipe.nutrition.fat)
-        .bind(recipe.nutrition.fiber)
-        .bind(recipe.nutrition.protein)
-        .bind(recipe.nutrition.saturated_fat)
-        .bind(recipe.nutrition.sodium)
-        .bind(recipe.nutrition.fat)
-        .execute(&pool)
+    let id: usize = pool.incr(key_next_id(), 1)
         .await
-        .map_err(|err| Box::new(err) as BoxError)?
-        .last_insert_id();
+        .map_err(|err| Box::new(err) as BoxError)?;
 
-    for keyword in &recipe.keywords {
-        let tx = pool.begin()
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
-        
-        let keyword_id = match get_keyword_id(pool.clone(), keyword).await? {
-            Some(id) => id,
-            None => query("INSERT INTO keyword (keyword) VALUES (?)")
-                .bind(keyword)
-                .execute(&pool)
-                .await
-                .map_err(|err| Box::new(err) as BoxError)?
-                .last_insert_id() as i32,
-        };
+    let mut pipe = redis::pipe();
 
-        tx.commit()
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.sadd(key_recipes(), id);
 
-        query("INSERT INTO recipe_keyword (recipe, keyword) VALUES (?, ?)")
-            .bind(recipe_id)
-            .bind(keyword_id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.set(key_recipe_link(id), recipe.link);
+
+    pipe.sadd(key_title_recipes(&recipe.title), id);
+    pipe.set(key_recipe_title(id), recipe.title);
+
+    pipe.sadd(key_description_recipes(&recipe.description), id);
+    pipe.set(key_recipe_description(id), recipe.description);
+
+    recipe.date.map(|v| pipe.set(key_recipe_date(id), v.to_string()));
+    recipe.rating.map(|v| pipe.set(key_recipe_rating(id), v));
+    recipe.rating_count.map(|v| pipe.set(key_recipe_rating_count(id), v));
+    recipe.prep_time_seconds.map(|v| pipe.set(key_recipe_prep_time_seconds(id), v.as_secs().to_string()));
+    recipe.cook_time_seconds.map(|v| pipe.set(key_recipe_cook_time_seconds(id), v.as_secs().to_string()));
+    recipe.total_time_seconds.map(|v| pipe.set(key_recipe_total_time_seconds(id), v.as_secs().to_string()));
+    recipe.servings.map(|v| pipe.set(key_recipe_servings(id), v));
+    recipe.calories.map(|v| pipe.set(key_recipe_calories(id), v));
+    recipe.carbohydrates.map(|v| pipe.set(key_recipe_carbohydrates(id), v));
+    recipe.cholesterol.map(|v| pipe.set(key_recipe_cholesterol(id), v));
+    recipe.fat.map(|v| pipe.set(key_recipe_fat(id), v));
+    recipe.fiber.map(|v| pipe.set(key_recipe_fiber(id), v));
+    recipe.protein.map(|v| pipe.set(key_recipe_protein(id), v));
+    recipe.saturated_fat.map(|v| pipe.set(key_recipe_saturated_fat(id), v));
+    recipe.sodium.map(|v| pipe.set(key_recipe_sodium(id), v));
+    recipe.sugar.map(|v| pipe.set(key_recipe_sugar(id), v));
+
+    pipe.cmd("lpush").arg(key_recipe_keywords(id));
+    for keyword in recipe.keywords {
+        pipe.arg(keyword);
     }
 
-
-    for author in &recipe.authors {
-        let author_id = query("INSERT INTO author (name) VALUES (?)")
-            .bind(author)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-            .last_insert_id() as i32;
-
-        query("INSERT INTO recipe_author (recipe, author) VALUES (?, ?)")
-            .bind(recipe_id)
-            .bind(author_id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.cmd("lpush").arg(key_recipe_authors(id));
+    for author in recipe.authors {
+        pipe.arg(author);
     }
 
-    for image in &recipe.images {
-        let image_id = query("INSERT INTO image (image) VALUES (?)")
-            .bind(image)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-            .last_insert_id();
-
-        query("INSERT INTO recipe_image (recipe, image) VALUES (?, ?)")
-            .bind(recipe_id)
-            .bind(image_id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.cmd("lpush").arg(key_recipe_images(id));
+    for image in recipe.images {
+        pipe.arg(image);
     }
 
-    for ingredient in &recipe.ingredients {
-        let ingredient_id = query("INSERT INTO ingredient (ingredient) VALUES (?)")
-            .bind(ingredient)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-            .last_insert_id();
-
-        query("INSERT INTO recipe_ingredient (recipe, ingredient) VALUES (?, ?)")
-            .bind(recipe_id)
-            .bind(ingredient_id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.cmd("lpush").arg(key_recipe_ingredients(id));
+    for ingredient in recipe.ingredients {
+        pipe.arg(ingredient);
     }
 
-    for instruction in &recipe.instructions {
-        let instruction_id = query("INSERT INTO instruction (instruction) VALUES (?)")
-            .bind(instruction)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?
-            .last_insert_id();
-
-        query("INSERT INTO recipe_instruction (recipe, instruction) VALUES (?, ?)")
-            .bind(recipe_id)
-            .bind(instruction_id)
-            .execute(&pool)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.cmd("lpush").arg(key_recipe_instructions(id));
+    for instruction in recipe.instructions {
+        pipe.arg(instruction);
     }
+
+    pipe.exec_async(&mut pool)
+        .await
+        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
     
     Ok(true)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn exists(pool: Pool<MySql>, recipe: &Recipe) -> Result<bool, BoxError> {
-    Ok(query("SELECT id FROM recipe WHERE title = ? AND description = ? LIMIT 1")
-        .bind(&recipe.title)
-        .bind(&recipe.description)
-        .fetch_optional(&pool)
+async fn exists(mut pool: MultiplexedConnection, recipe: &Recipe) -> Result<bool, BoxError> {
+    let recipes_with_titles: Vec<usize> = pool.smembers(key_title_recipes(&recipe.title))
         .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?
-        .is_some())
-}
+        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
 
-#[tracing::instrument(skip(pool))]
-#[must_use]
-async fn get_keyword_id(pool: Pool<MySql>, keyword: &str) -> Result<Option<i32>, BoxError> {
-    query_as::<_, Id>("SELECT id FROM keyword WHERE keyword = ? LIMIT 1")
-        .bind(keyword)
-        .fetch_optional(&pool)
+    let recipes_with_description: Vec<usize> = pool.smembers(key_description_recipes(&recipe.description))
         .await
-        .map_err(|err| Box::new(err) as BoxError)
-        .map(|v| v.map(|v| v.0))
+        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
+
+    Ok(recipes_with_titles.iter().any(|x| recipes_with_description.contains(x)))
 }
 
