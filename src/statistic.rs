@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use log::{info, warn};
 use redis::aio::MultiplexedConnection;
@@ -15,10 +15,7 @@ async fn update(
     redis_recipes: MultiplexedConnection, 
     mysql: Pool<MySql>,
 ) -> Result<(), BoxError> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = chrono::offset::Utc::now();
 
     query("INSERT INTO word_statistic (
 timestamp, waiting_for_generation, generating, generation_failed, generation_complete, waiting_for_classification,
