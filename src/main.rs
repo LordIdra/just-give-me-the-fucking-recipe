@@ -18,7 +18,7 @@ mod gpt;
 mod link;
 mod link_blacklist;
 mod recipe;
-//mod statistic;
+mod statistic;
 mod word;
 
 type BoxError = Box<dyn Error + Send>;
@@ -62,7 +62,8 @@ pub struct AppState {
     redis_links: MultiplexedConnection,
     #[allow(unused)]
     redis_recipes: MultiplexedConnection,
-    //redis_statistics: MultiplexedConnection,
+    #[allow(unused)]
+    redis_statistics: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -105,11 +106,11 @@ async fn main() {
         .await
         .unwrap();
 
-    //let redis_statistics = redis::Client::open("redis://127.0.0.1:6383")
-    //    .unwrap()
-    //    .get_multiplexed_tokio_connection()
-    //    .await
-    //    .unwrap();
+    let redis_statistics = redis::Client::open("redis://127.0.0.1:6383")
+        .unwrap()
+        .get_multiplexed_tokio_connection()
+        .await
+        .unwrap();
 
     word::reset_tasks(redis_words.clone()).await.expect("Failed to reset word tasks");
     link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
@@ -118,13 +119,13 @@ async fn main() {
     tokio::spawn(generator::run(redis_words.clone(), args.openai_key));
     tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
-    //tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), redis_statistics.clone()));
+    tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), redis_statistics.clone()));
 
     let state = AppState {
         redis_words,
         redis_links,
         redis_recipes,
-        //redis_statistics,
+        redis_statistics,
     };
     
     let app = Router::new()

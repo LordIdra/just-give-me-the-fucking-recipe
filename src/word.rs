@@ -24,6 +24,21 @@ pub enum WordStatus {
 }
 
 impl WordStatus {
+    pub const ALL_WORD_STATUSES: [WordStatus; 12] = [
+        WordStatus::WaitingForGeneration,
+        WordStatus::Generating,
+        WordStatus::GenerationFailed,
+        WordStatus::GenerationComplete,
+        WordStatus::WaitingForClassification,
+        WordStatus::Classifying,
+        WordStatus::ClassificationFailed,
+        WordStatus::ClassifiedAsInvalid,
+        WordStatus::WaitingForSearch,
+        WordStatus::Searching,
+        WordStatus::SearchFailed,
+        WordStatus::SearchComplete,
+    ];
+
     pub fn from_string(x: &str) -> Option<Self> {
         match x {
             "waiting_for_generation" => Some(WordStatus::WaitingForGeneration),

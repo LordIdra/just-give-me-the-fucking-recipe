@@ -36,6 +36,14 @@ pub enum LinkStatus {
 }
 
 impl LinkStatus {
+    pub const ALL_LINK_STATUSES: [LinkStatus; 5] = [
+        LinkStatus::Waiting,
+        LinkStatus::Processing,
+        LinkStatus::DownloadFailed,
+        LinkStatus::ExtractionFailed,
+        LinkStatus::Processed,
+    ];
+
     pub fn from_string(x: &str) -> Option<Self> {
         match x {
             "waiting" => Some(LinkStatus::Waiting),
