@@ -46,6 +46,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i64)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i64)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i64)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ParsingFailed).await? as i64)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i64)
         .bind(link::total_content_size(redis_links.clone()).await? as u64)
         .execute(&mysql)
