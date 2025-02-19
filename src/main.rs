@@ -1,4 +1,5 @@
 use std::fmt;
+use std::time::Duration;
 use std::{error::Error, fs::File};
 use std::io::Read;
 
@@ -8,6 +9,7 @@ use log::{info, trace, warn};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
+use sqlx::mysql::MySqlPoolOptions;
 use tokio::net::TcpListener;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
@@ -62,8 +64,6 @@ pub struct AppState {
     redis_links: MultiplexedConnection,
     #[allow(unused)]
     redis_recipes: MultiplexedConnection,
-    #[allow(unused)]
-    redis_statistics: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -88,6 +88,14 @@ async fn main() {
 
     let certificates = Certificate::from_pem_bundle(&buf).unwrap();
 
+    let mysql = MySqlPoolOptions::new()
+        .test_before_acquire(true)
+        .max_connections(200)
+        .acquire_timeout(Duration::from_secs(2))
+        .connect(&args.database_url)
+        .await
+        .expect("Failed to connect to database");
+
     let redis_words = redis::Client::open("redis://127.0.0.1:6380")
         .unwrap()
         .get_multiplexed_tokio_connection()
@@ -106,12 +114,6 @@ async fn main() {
         .await
         .unwrap();
 
-    let redis_statistics = redis::Client::open("redis://127.0.0.1:6383")
-        .unwrap()
-        .get_multiplexed_tokio_connection()
-        .await
-        .unwrap();
-
     word::reset_tasks(redis_words.clone()).await.expect("Failed to reset word tasks");
     link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
 
@@ -119,13 +121,12 @@ async fn main() {
     tokio::spawn(generator::run(redis_words.clone(), args.openai_key));
     tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), redis_statistics.clone()));
+    tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), mysql));
 
     let state = AppState {
         redis_words,
         redis_links,
         redis_recipes,
-        redis_statistics,
     };
     
     let app = Router::new()

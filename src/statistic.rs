@@ -1,32 +1,68 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::{info, warn};
-use redis::{aio::MultiplexedConnection, AsyncCommands};
+use redis::aio::MultiplexedConnection;
+use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{word::{words_with_status, WordStatus}, BoxError};
+use crate::{link::{self, LinkStatus}, word::{self, WordStatus}, BoxError};
 
-#[tracing::instrument(skip(redis_words, redis_links, redis_recipes, redis_statistics))]
+#[tracing::instrument(skip(redis_words, redis_links, mysql))]
 #[must_use]
 async fn update(
-    mut redis_words: MultiplexedConnection, 
-    mut redis_links: MultiplexedConnection, 
-    mut redis_recipes: MultiplexedConnection, 
-    mut redis_statistics: MultiplexedConnection, 
+    redis_words: MultiplexedConnection, 
+    redis_links: MultiplexedConnection, 
+    redis_recipes: MultiplexedConnection, 
+    mysql: Pool<MySql>,
 ) -> Result<(), BoxError> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
 
-    for status in WordStatus::ALL_WORD_STATUSES {
-        let key = format!("word:words_with_status:{}", status.to_string());
-        let words_with_status = words_with_status(redis_words.clone(), status)
-            .await?;
-        let _: () = redis_statistics.zadd(key, timestamp, words_with_status)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
-    }
+    query("INSERT INTO word_statistic (
+timestamp, waiting_for_generation, generating, generation_failed, generation_complete, waiting_for_classification,
+classifying, classification_failed, classified_as_invalid, waiting_for_search, searching, search_failed, search_complete
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(timestamp)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForGeneration).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::Generating).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::GenerationFailed).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::GenerationComplete).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForClassification).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::Classifying).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::ClassificationFailed).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::ClassifiedAsInvalid).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForSearch).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::Searching).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::SearchFailed).await? as i32)
+        .bind(word::words_with_status(redis_words.clone(), WordStatus::SearchComplete).await? as i32)
+        .execute(&mysql)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+    query("INSERT INTO link_statistic (
+timestamp, waiting_for_processing, processing, download_failed, extraction_failed, processed, total_content_size
+) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(timestamp)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i32)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i32)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i32)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i32)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i32)
+        .bind(link::total_content_size(redis_links.clone()).await? as u64)
+        .execute(&mysql)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
+
+//    query("INSERT INTO recipe_statistic (
+//timestamp, recipe_count
+//) VALUES (?, ?)")
+//        .bind(timestamp)
+//        .bind(fetch_count(mysql.clone(), "recipe").await?)
+//        .execute(&mysql)
+//        .await
+//        .map_err(|err| Box::new(err) as BoxError)?;
 
     info!("Statistics updated");
 
@@ -37,16 +73,16 @@ pub async fn run(
     redis_words: MultiplexedConnection, 
     redis_links: MultiplexedConnection, 
     redis_recipes: MultiplexedConnection, 
-    redis_statistics: MultiplexedConnection, 
+    mysql: Pool<MySql>
 ) {
     info!("Started statistic updater");
 
-    let mut interval = interval(Duration::from_secs(5));
+    let mut interval = interval(Duration::from_secs(30));
 
     loop {
         interval.tick().await;
 
-        if let Err(err) = update(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), redis_statistics.clone()).await {
+        if let Err(err) = update(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), mysql.clone()).await {
             warn!("Error while updating statistics: {} (source: {:?})", err, err.source());
         }
     }
