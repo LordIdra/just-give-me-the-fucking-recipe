@@ -255,7 +255,7 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
 pub async fn recipe_count(mut redis_recipes: MultiplexedConnection) -> Result<usize, BoxError> {
-    let count: usize = redis_recipes.zcard(key_recipes())
+    let count: usize = redis_recipes.scard(key_recipes())
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
