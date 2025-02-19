@@ -40,7 +40,7 @@ pub async fn run(
 ) {
     info!("Started statistic updater");
 
-    let mut interval = interval(Duration::from_secs(30));
+    let mut interval = interval(Duration::from_secs(5));
 
     loop {
         interval.tick().await;
