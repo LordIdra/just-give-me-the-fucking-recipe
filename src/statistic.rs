@@ -20,9 +20,10 @@ async fn update(
         .as_secs();
 
     for status in WordStatus::ALL_WORD_STATUSES {
+        let key = format!("word:words_with_status:{}", status.to_string());
         let words_with_status = words_with_status(redis_words.clone(), status)
             .await?;
-        let _: () = redis_statistics.zadd("word:words_with_status", words_with_status, timestamp)
+        let _: () = redis_statistics.zadd(key, words_with_status, timestamp)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
     }
