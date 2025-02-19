@@ -40,7 +40,7 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
 
     query("INSERT INTO link_statistic (
 timestamp, waiting_for_processing, processing, download_failed, extraction_failed, parsing_failed processed, total_content_size
-) VALUES (?, ?, ?, ?, ?, ?, ?)")
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i64)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i64)
