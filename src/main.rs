@@ -119,7 +119,7 @@ async fn main() {
 
     tokio::spawn(classifier::run(redis_words.clone(), args.openai_key.clone()));
     tokio::spawn(generator::run(redis_words.clone(), args.openai_key));
-    tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
+    //tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
     tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), mysql));
 
