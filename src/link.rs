@@ -32,24 +32,18 @@ pub enum LinkStatus {
     Processing,
     DownloadFailed,
     ExtractionFailed,
+    ParsingFailed,
     Processed,
 }
 
 impl LinkStatus {
-    pub const ALL_LINK_STATUSES: [LinkStatus; 5] = [
-        LinkStatus::Waiting,
-        LinkStatus::Processing,
-        LinkStatus::DownloadFailed,
-        LinkStatus::ExtractionFailed,
-        LinkStatus::Processed,
-    ];
-
     pub fn from_string(x: &str) -> Option<Self> {
         match x {
             "waiting" => Some(LinkStatus::Waiting),
             "processing" => Some(LinkStatus::Processing),
             "download_failed" => Some(LinkStatus::DownloadFailed),
             "extraction_failed" => Some(LinkStatus::ExtractionFailed),
+            "parsing_failed" => Some(LinkStatus::ExtractionFailed),
             "processed" => Some(LinkStatus::Processed),
             _ => None,
         }
@@ -61,6 +55,7 @@ impl LinkStatus {
             LinkStatus::Processing => "processing",
             LinkStatus::DownloadFailed => "download_failed",
             LinkStatus::ExtractionFailed => "extraction_failed",
+            LinkStatus::ParsingFailed => "parsing_failed",
             LinkStatus::Processed => "processed",
         }
     }
@@ -396,18 +391,20 @@ pub async fn process_parse(
     schema: Value,
     link: String
 ) -> Result<Option<Recipe>, BoxError> {
-    // Set to processed now rather than after following to avoid duplicate recipes appearing
-    update_status(redis_links.clone(), &link, LinkStatus::Processed)
-        .await?;
 
     let parsed = parser::parse(link.to_string(), schema)
         .await;
 
     let Some(parsed) = parsed else {
         trace!("Failed to parse recipe from {}", link);
+        update_status(redis_links.clone(), &link, LinkStatus::ParsingFailed)
+            .await?;
         return Ok(None);
     };
 
+
+    update_status(redis_links.clone(), &link, LinkStatus::Processed)
+        .await?;
     recipe::add(redis_recipes, parsed.clone())
         .await?;
 
