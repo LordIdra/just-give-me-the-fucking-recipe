@@ -39,7 +39,7 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
         .map_err(|err| Box::new(err) as BoxError)?;
 
     query("INSERT INTO link_statistic (
-timestamp, waiting_for_processing, processing, download_failed, extraction_failed, parsing_failed processed, total_content_size
+timestamp, waiting_for_processing, processing, download_failed, extraction_failed, parsing_failed, processed, total_content_size
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
         .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i64)
