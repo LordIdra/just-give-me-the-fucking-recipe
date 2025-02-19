@@ -136,7 +136,7 @@ pub async fn run(redis_words: MultiplexedConnection, redis_links: MultiplexedCon
                 break
             }
 
-            let next_job = word::next_job(redis_words.clone(), WordStatus::WaitingForSearch, WordStatus::SearchComplete).await;
+            let next_job = word::next_job(redis_words.clone(), WordStatus::WaitingForSearch, WordStatus::Searching).await;
             if let Err(err) = next_job {
                 warn!("Error while getting next job: {}", err);
                 break;
