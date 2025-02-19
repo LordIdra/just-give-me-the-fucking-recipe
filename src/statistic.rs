@@ -23,7 +23,7 @@ async fn update(
         let key = format!("word:words_with_status:{}", status.to_string());
         let words_with_status = words_with_status(redis_words.clone(), status)
             .await?;
-        let _: () = redis_statistics.zadd(key, words_with_status, timestamp)
+        let _: () = redis_statistics.zadd(key, timestamp, words_with_status)
             .await
             .map_err(|err| Box::new(err) as BoxError)?;
     }
