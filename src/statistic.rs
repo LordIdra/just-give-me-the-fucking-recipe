@@ -5,9 +5,9 @@ use redis::aio::MultiplexedConnection;
 use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{link::{self, LinkStatus}, word::{self, WordStatus}, BoxError};
+use crate::{link::{self, LinkStatus}, recipe, word::{self, WordStatus}, BoxError};
 
-#[tracing::instrument(skip(redis_words, redis_links, mysql))]
+#[tracing::instrument(skip(redis_words, redis_links, redis_recipes, mysql))]
 #[must_use]
 async fn update(
     redis_words: MultiplexedConnection, 
@@ -42,24 +42,24 @@ classifying, classification_failed, classified_as_invalid, waiting_for_search, s
 timestamp, waiting_for_processing, processing, download_failed, extraction_failed, processed, total_content_size
 ) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i32)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i32)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i32)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i32)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i32)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i64)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i64)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i64)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i64)
+        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i64)
         .bind(link::total_content_size(redis_links.clone()).await? as u64)
         .execute(&mysql)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
-//    query("INSERT INTO recipe_statistic (
-//timestamp, recipe_count
-//) VALUES (?, ?)")
-//        .bind(timestamp)
-//        .bind(fetch_count(mysql.clone(), "recipe").await?)
-//        .execute(&mysql)
-//        .await
-//        .map_err(|err| Box::new(err) as BoxError)?;
+    query("INSERT INTO recipe_statistic (
+timestamp, recipe_count
+) VALUES (?, ?)")
+        .bind(timestamp)
+        .bind(recipe::recipe_count(redis_recipes.clone()).await? as i64)
+        .execute(&mysql)
+        .await
+        .map_err(|err| Box::new(err) as BoxError)?;
 
     info!("Statistics updated");
 
