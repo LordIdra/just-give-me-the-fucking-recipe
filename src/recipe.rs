@@ -210,29 +210,39 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
     recipe.sodium.map(|v| pipe.set(key_recipe_sodium(id), v));
     recipe.sugar.map(|v| pipe.set(key_recipe_sugar(id), v));
 
-    pipe.cmd("lpush").arg(key_recipe_keywords(id));
-    for keyword in recipe.keywords {
-        pipe.arg(keyword);
+    if !recipe.keywords.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_keywords(id));
+        for keyword in recipe.keywords {
+            pipe.arg(keyword);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_authors(id));
-    for author in recipe.authors {
-        pipe.arg(author);
+    if !recipe.authors.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_authors(id));
+        for author in recipe.authors {
+            pipe.arg(author);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_images(id));
-    for image in recipe.images {
-        pipe.arg(image);
+    if !recipe.images.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_images(id));
+        for image in recipe.images {
+            pipe.arg(image);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_ingredients(id));
-    for ingredient in recipe.ingredients {
-        pipe.arg(ingredient);
+    if !recipe.ingredients.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_ingredients(id));
+        for ingredient in recipe.ingredients {
+            pipe.arg(ingredient);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_instructions(id));
-    for instruction in recipe.instructions {
-        pipe.arg(instruction);
+    if !recipe.instructions.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_instructions(id));
+        for instruction in recipe.instructions {
+            pipe.arg(instruction);
+        }
     }
 
     pipe.exec_async(&mut redis_recipes)
