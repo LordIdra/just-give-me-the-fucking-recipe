@@ -74,8 +74,8 @@ async fn main() {
 
     let subscriber = tracing_subscriber::registry()
         .with(fmt_layer);
-    #[cfg(not(feature = "profiling"))]
-    subscriber.with(tracing_tracy::TracyLayer::default());
+    #[cfg(feature = "profiling")]
+    let subscriber = subscriber.with(tracing_tracy::TracyLayer::default());
     subscriber.init();
 
     info!("Starting...");
