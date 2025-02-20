@@ -14,7 +14,7 @@ use tokio::net::TcpListener;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
-use word::{classifier, generator, searcher, WordStatus};
+use word::{classifier, generator, WordStatus};
 
 mod gpt;
 mod link;
@@ -74,6 +74,7 @@ async fn main() {
 
     tracing_subscriber::registry()
         .with(fmt_layer)
+        .with(tracing_tracy::TracyLayer::default())
         .init();
 
     info!("Starting...");
