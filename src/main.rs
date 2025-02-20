@@ -72,10 +72,11 @@ async fn main() {
         .with_line_number(true)
         .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace"));
 
-    tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(tracing_tracy::TracyLayer::default())
-        .init();
+    let subscriber = tracing_subscriber::registry()
+        .with(fmt_layer);
+    #[cfg(not(feature = "profiling"))]
+    subscriber.with(tracing_tracy::TracyLayer::default());
+    subscriber.init();
 
     info!("Starting...");
 
