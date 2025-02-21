@@ -542,7 +542,7 @@ pub async fn run(
     info!("Started processor");
 
     let mut builder = ClientBuilder::new()
-        .proxy(Proxy::all(proxy).unwrap());
+        .proxy(Proxy::https(proxy).unwrap());
     
     for certificate in certificates {
         builder = builder.add_root_certificate(certificate);
