@@ -192,3 +192,12 @@ void test_extract() {
 
 }
 
+//int main() {
+//    test_check_prefix();
+//    test_handle_state_0();
+//    test_handle_state_1();
+//    test_handle_state_2();
+//    test_extract();
+//    return 1;
+//}
+
