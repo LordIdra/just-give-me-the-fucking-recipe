@@ -43,10 +43,6 @@ struct Args {
     #[arg(long)]
     port: usize,
     #[arg(long)]
-    openai_key: String,
-    #[arg(long)]
-    serper_key: String,
-    #[arg(long)]
     proxy: String,
     #[arg(long)]
     crt_file: String,

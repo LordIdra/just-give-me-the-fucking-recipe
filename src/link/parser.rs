@@ -370,7 +370,7 @@ pub async fn parse(link: String, schema: Value) -> Option<Recipe> {
         return None;
     }
 
-    let instructions = instructions (&schema);
+    let instructions = instructions(&schema);
     if instructions.is_empty() {
         return None;
     }

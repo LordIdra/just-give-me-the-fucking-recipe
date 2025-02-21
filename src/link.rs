@@ -89,6 +89,10 @@ fn key_link_to_domain() -> String {
     "link:domain".to_string()
 }
 
+fn key_link_to_parent() -> String {
+    "link:parent".to_string()
+}
+
 fn key_link_to_remaining_follows() -> String {
     "link:remaining_follows".to_string()
 }
@@ -117,6 +121,7 @@ pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError
 pub async fn add(
     mut pool: MultiplexedConnection,
     link: &str,
+    parent: Option<&str>,
     domain: &str,
     priority: f32,
     remaining_follows: i32,
@@ -125,14 +130,19 @@ pub async fn add(
         return Ok(false);
     }
 
-    let _: () = redis::pipe()
-        .zadd(key_status_to_links(LinkStatus::Waiting), link, priority)
+    let mut pipe = redis::pipe();
+    pipe.zadd(key_status_to_links(LinkStatus::Waiting), link, priority)
         .hset(key_link_to_status(), link, LinkStatus::Waiting.to_string())
         .hset(key_link_to_priority(), link, priority)
         .hset(key_link_to_domain(), link, domain)
         .hset(key_link_to_remaining_follows(), link, remaining_follows)
-        .sadd(key_waiting_domains(), domain)
-        .exec_async(&mut pool)
+        .sadd(key_waiting_domains(), domain);
+
+    if let Some(parent) = parent {
+        pipe.hset(key_link_to_parent(), link, parent);
+    }
+
+    let _: () = pipe.exec_async(&mut pool)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -458,7 +468,7 @@ pub async fn process_follow(
             .and_then(|url| url.domain().map(|domain| domain.to_owned()));
 
         if let Some(domain) = maybe_domain {
-            let added = link::add(redis_links.clone(), new_link, &domain, new_priority, new_remaining_follows)
+            let added = link::add(redis_links.clone(), new_link, Some(&link), &domain, new_priority, new_remaining_follows)
                 .await?;
             if added {
                 added_links.push(new_link) 
