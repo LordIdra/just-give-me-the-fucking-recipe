@@ -17,7 +17,7 @@ mod c_extractor {
             if output.is_null() {
                 None
             } else {
-                let result = str::from_utf8(CString::from_raw(output).to_bytes()).unwrap().to_string();
+                let result = str::from_utf8(CString::from_raw(output).to_bytes()).ok().unwrap().to_string();
                 Some(result)
             }
         }
