@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::BoxError;
 
 mod c_extractor {
-    use std::ffi::{c_char, CString};
+    use std::{ffi::{c_char, CString}, str};
 
     #[link(name = "extractor")]
     extern {
@@ -17,7 +17,7 @@ mod c_extractor {
             if output.is_null() {
                 None
             } else {
-                let result = CString::from_raw(output).into_string().unwrap();
+                let result = str::from_utf8(CString::from_raw(output).to_bytes()).unwrap().to_string();
                 Some(result)
             }
         }
