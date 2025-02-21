@@ -44,9 +44,9 @@ pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxErr
         return Ok(None);
     };
 
-    let mut schema  = serde_json::from_str::<Value>(schema.as_str())
+    let mut schema = serde_json::from_str::<Value>(schema.as_str())
         .map_err(|err| {
-            error!("{}", link);
+            error!("{} = {}", link, schema);
             Box::new(err) as BoxError
         })?;
 
