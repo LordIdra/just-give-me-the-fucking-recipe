@@ -47,7 +47,11 @@ struct Args {
     #[arg(long)]
     crt_file: String,
     #[arg(long)]
-    database_url: String,
+    mysql_url: String,
+    #[arg(long)]
+    redis_links_url: String,
+    #[arg(long)]
+    redis_recipe_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -86,17 +90,17 @@ async fn main() {
         .test_before_acquire(true)
         .max_connections(200)
         .acquire_timeout(Duration::from_secs(2))
-        .connect(&args.database_url)
+        .connect(&args.mysql_url)
         .await
         .expect("Failed to connect to database");
 
-    let redis_links = redis::Client::open("redis://127.0.0.1:6381")
+    let redis_links = redis::Client::open(args.redis_links_url)
         .unwrap()
         .get_multiplexed_tokio_connection()
         .await
         .unwrap();
 
-    let redis_recipes = redis::Client::open("redis://127.0.0.1:6382")
+    let redis_recipes = redis::Client::open(args.redis_recipe_url)
         .unwrap()
         .get_multiplexed_tokio_connection()
         .await
