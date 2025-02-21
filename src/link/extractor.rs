@@ -30,6 +30,7 @@ mod c_extractor {
 
 #[tracing::instrument(skip(contents))]
 pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxError> {
+    let _sp = tracy_client::span!("fuck");
     //let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
     //    .dot_matches_new_line(true)
     //    .build()
