@@ -41,12 +41,14 @@ pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxErr
     //    .unwrap();
 
     let Some(schema) = c_extractor::extract_wrapper(contents) else {
-        error!("{}", link);
         return Ok(None);
     };
 
     let mut schema  = serde_json::from_str::<Value>(schema.as_str())
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .map_err(|err| {
+            error!("{}", link);
+            Box::new(err) as BoxError
+        })?;
 
     if let Some(graph) = schema.get("@graph") {
         if let Some(arr) = graph.as_array() {
