@@ -41,7 +41,7 @@ pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxErr
     //    .unwrap();
 
     let Some(schema) = c_extractor::extract_wrapper(contents) else {
-        error!(link);
+        error!("{}", link);
         return Ok(None);
     };
 
