@@ -1,0 +1,36 @@
+[package]
+name = "recipe-finder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+recipe_common = { path = "../recipe-common" }
+clap = { version = "4.5.23", features = ["derive"] }
+tokio = { version = "1.42.0", features = ["full"] }
+reqwest = { version = "0.12.10", features = ["json", "hickory-dns"] }
+serde = { version = "1.0.216", features = ["derive"] }
+sqlx = { version = "0.8.3", features = ["mysql", "runtime-tokio", "chrono"] }
+redis = { version = "0.28.2", features = ["tokio-comp"] }
+serde_json = "1.0.134"
+log = "0.4.22"
+regex = "1.11.1"
+url = "2.5.4"
+chrono = "0.4.39"
+rand = "0.8.5"
+iso8601 = "0.6.1"
+dateparser = "0.2.1"
+tracing = { version = "0.1.40" }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracy-client = { version = "0.16.4", optional = true }
+tracing-tracy = { version = "0.10.4", optional = true }
+
+[build-dependencies]
+cc = "1.2.14"
+
+[features]
+profiling = ["tracy-client", "tracing-tracy"]
+
+[profile.profiling]
+inherits = "release"
+debug = true
+

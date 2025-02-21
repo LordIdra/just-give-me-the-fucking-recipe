@@ -1,0 +1,17 @@
+[package]
+name = "recipe-common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.42.0", features = ["full"] }
+redis = { version = "0.28.2", features = ["tokio-comp"] }
+serde_json = "1.0.134"
+log = "0.4.22"
+tracing = { version = "0.1.40" }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+[profile.profiling]
+inherits = "release"
+debug = true
+

@@ -3,14 +3,11 @@ use std::time::Duration;
 use std::{error::Error, fs::File};
 use std::io::Read;
 
-use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
 use log::info;
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
-use serde::Deserialize;
 use sqlx::mysql::MySqlPoolOptions;
-use tokio::net::TcpListener;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
@@ -32,11 +29,6 @@ impl fmt::Display for UnexpectedStatusCodeErr {
 }
 
 impl Error for UnexpectedStatusCodeErr {}
-
-#[derive(Debug, Deserialize)]
-struct SubmitKeyword {
-    keyword: String,
-}
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -66,7 +58,7 @@ pub struct AppState {
 async fn main() {
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_line_number(true)
-        .with_filter(EnvFilter::new("just_give_me_the_fucking_recipe=trace"));
+        .with_filter(EnvFilter::new("recipe-finder=trace"));
 
     let subscriber = tracing_subscriber::registry()
         .with(fmt_layer);
@@ -115,33 +107,5 @@ async fn main() {
         redis_links,
         redis_recipes,
     };
-    
-    let app = Router::new()
-        .route("/", post(submit_keyword))
-        .with_state(state);
-
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await.unwrap();
-
-    axum::serve(listener, app).await.unwrap();
-}
-
-#[tracing::instrument(skip(state))]
-async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
-    todo!();
-    //match word::add(state.redis_words, &request.keyword, None, 0.0, WordStatus::WaitingForClassification).await {
-    //    Ok(was_added) => {
-    //        if was_added {
-    //            trace!("Added new input {}", request.keyword);
-    //            StatusCode::OK
-    //        } else {
-    //            trace!("Rejected duplicate new input {}", request.keyword);
-    //            StatusCode::CONFLICT
-    //        }
-    //    },
-    //    Err(err) => {
-    //        warn!("Error while submitting keyword: {} (source: {:?})", err, err.source());
-    //        StatusCode::INTERNAL_SERVER_ERROR
-    //    },
-    //}
 }
 
