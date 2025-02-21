@@ -104,21 +104,18 @@ void test_handle_state_1() {
     {
         char string[] = "";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_1 1: %i\n", handle_state_1(&current) == -1);
     }
 
     {
         char string[] = "bruh";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_1 2: %i\n", handle_state_1(&current) == -1);
     }
 
     {
         char string[] = "bruh thisn schema rurz</script>";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_1 3: %i\n", handle_state_1(&current) == 2);
         printf("test_handle_state_1 3: %i\n", *current == 's');
     }
@@ -144,21 +141,18 @@ void test_handle_state_2() {
     {
         char string[] = "";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_2 1: %i\n", handle_state_2(&current) == -1);
     }
 
     {
         char string[] = "bruh";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_2 2: %i\n", handle_state_2(&current) == -1);
     }
 
     {
         char string[] = "bruh thisn schema rurz</script>";
         char* current = string;
-        char* match_start = NULL;
         printf("test_handle_state_2 3: %i\n", handle_state_2(&current) == 3);
         printf("test_handle_state_2 3: %i\n", *current == 'z');
     }
@@ -198,12 +192,12 @@ void test_extract() {
 
 }
 
-int main() {
-    test_check_prefix();
-    test_handle_state_0();
-    test_handle_state_1();
-    test_handle_state_2();
-    test_extract();
-    return 1;
-}
+//int main() {
+//    test_check_prefix();
+//    test_handle_state_0();
+//    test_handle_state_1();
+//    test_handle_state_2();
+//    test_extract();
+//    return 1;
+//}
 
