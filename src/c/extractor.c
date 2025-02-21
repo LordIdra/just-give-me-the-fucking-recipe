@@ -185,10 +185,10 @@ char* extract(char* input) {
         }
 
         if (state == 3) {
-            int size = (current - match_start) + 1;
-            printf("FUCK FUCK FUCK %i", size);
+            int size = (current - match_start) + 2;
             char* buffer = (char*) malloc(size);
             memcpy(buffer, match_start, size);
+            *(buffer + size - 1) = 0;
             return buffer;
         }
     }
