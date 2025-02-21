@@ -1,41 +1,47 @@
-use regex::RegexBuilder;
 use serde_json::Value;
 
 use crate::BoxError;
 
+mod c_extractor {
+    use std::ffi::{c_char, CString};
+
+    #[link(name = "extractor")]
+    extern {
+        fn extract(input: *const c_char) -> *mut c_char;
+    }
+    
+    pub fn extract_wrapper(input: &str) -> Option<String> {
+        unsafe {
+            let input = CString::new(input).unwrap();
+            let output = extract(input.as_ptr());
+            if output.is_null() {
+                None
+            } else {
+                let result = CString::from_raw(output).into_string().unwrap();
+                Some(result)
+            }
+        }
+    }
+}
+
 #[tracing::instrument(skip(contents))]
 pub async fn extract(contents: &str) -> Result<Option<Value>, BoxError> {
-    let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
-        .dot_matches_new_line(true)
-        .build()
-        .unwrap();
+    //let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
+    //    .dot_matches_new_line(true)
+    //    .build()
+    //    .unwrap();
 
-    let schema_regex = RegexBuilder::new(r#"\{.{0,1000}?(schema|("@type": "Recipe")).{0,1000}?@type.*\}"#)
-        .dot_matches_new_line(true)
-        .build()
-        .unwrap();
+    //let schema_regex = RegexBuilder::new(r#"\{.{0,1000}?(schema|("@type": "Recipe")).{0,1000}?@type.*\}"#)
+    //    .dot_matches_new_line(true)
+    //    .build()
+    //    .unwrap();
 
-    let mut schema = None;
-
-    for script in script_regex.captures_iter(contents) {
-        let script = script.get(1).unwrap().into();
-
-        let Some(other_schema) = schema_regex.captures(script) else {
-            continue;
-        };
-
-        let other_schema = other_schema.get(0).unwrap();
-        let other_schema = serde_json::from_str::<Value>(other_schema.as_str())
-            .map_err(|err| Box::new(err) as BoxError)?;
-
-        schema = Some(other_schema);
-
-        break;
-    }
-
-    let Some(mut schema) = schema else {
+    let Some(schema) = c_extractor::extract_wrapper(contents) else {
         return Ok(None);
     };
+
+    let mut schema  = serde_json::from_str::<Value>(schema.as_str())
+        .map_err(|err| Box::new(err) as BoxError)?;
 
     if let Some(graph) = schema.get("@graph") {
         if let Some(arr) = graph.as_array() {
