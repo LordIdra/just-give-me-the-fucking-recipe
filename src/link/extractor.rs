@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::BoxError;
 
 mod c_extractor {
-    use std::{ffi::{c_char, CString}, str};
+    use std::{ffi::{c_char, CStr, CString}, str};
 
     #[link(name = "extractor")]
     extern {
@@ -21,7 +21,7 @@ mod c_extractor {
             if output.is_null() {
                 None
             } else {
-                let result = str::from_utf8(CString::from_raw(output).to_bytes()).unwrap().to_string();
+                let result = str::from_utf8(CStr::from_ptr(output).to_bytes()).unwrap().to_string();
                 Some(result)
             }
         }
@@ -30,17 +30,6 @@ mod c_extractor {
 
 #[tracing::instrument(skip(contents))]
 pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxError> {
-    let _sp = tracy_client::span!("fuck");
-    //let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
-    //    .dot_matches_new_line(true)
-    //    .build()
-    //    .unwrap();
-
-    //let schema_regex = RegexBuilder::new(r#"\{.{0,1000}?(schema|("@type": "Recipe")).{0,1000}?@type.*\}"#)
-    //    .dot_matches_new_line(true)
-    //    .build()
-    //    .unwrap();
-
     let Some(schema) = c_extractor::extract_wrapper(contents) else {
         return Ok(None);
     };
