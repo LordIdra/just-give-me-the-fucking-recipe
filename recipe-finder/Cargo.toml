@@ -30,7 +30,3 @@ cc = "1.2.14"
 [features]
 profiling = ["tracy-client", "tracing-tracy"]
 
-[profile.profiling]
-inherits = "release"
-debug = true
-
