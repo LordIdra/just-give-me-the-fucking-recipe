@@ -24,6 +24,9 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
         .filter(|new_link| Url::parse(new_link).is_ok())
         // eg, bruh.com/some-recipe might have links to bruh.com/some-recipe/comments#36
         .filter(|new_link| !new_link.starts_with(&link))
+        // hardcoded fix. often, recipes have www.domain.com/your_shitty_recipe/wprm_print pages
+        // these pages have shit schemas. but the original pages are generally fine
+        .map(|v| v.replace("/wprm_print", ""))
         .map(|v| v.to_owned())
         .collect()
 }
