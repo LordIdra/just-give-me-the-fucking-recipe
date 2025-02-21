@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-
+// Original regex from rust:
 //let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
 //    .dot_matches_new_line(true)
 //    .build()
@@ -14,9 +14,7 @@
 //    .unwrap();
 
 int check_prefix(char* actual, char* expected) {
-    int i = 0;
-    for (; expected[i] != 0 && actual[i] != 0 && expected[i] == actual[i]; i++);
-    return expected[i] == 0;
+    return strncmp(actual, expected, strlen(expected)) == 0;
 }
 
 void test_check_prefix() {
@@ -188,7 +186,7 @@ char* extract(char* input) {
             int size = (current - match_start) + 2;
             char* buffer = (char*) malloc(size);
             memcpy(buffer, match_start, size);
-            *(buffer + size - 1) = 0;
+            buffer[size - 1] = '\0';
             return buffer;
         }
     }
@@ -198,8 +196,30 @@ void test_extract() {
     {
         char input[] = "<script> burn the naan schema</script>";
         char expected[] = " burn the naan schema";
-        printf("test_extract: %i\n", !strcmp(extract(input), expected));
+        printf("test_extract 1: %i\n", !strcmp(extract(input), expected));
     }
 
+    {
+        char input[] = "<script burn the naan";
+        printf("test_extract 2: %i\n", extract(input) == NULL);
+    }
+
+    {
+        char input[] = "<script> burn the naan";
+        printf("test_extract 3: %i\n", extract(input) == NULL);
+    }
+
+    {
+        char input[] = "<script> burn the naan </script> schema";
+        printf("test_extract 4: %i\n", extract(input) == NULL);
+    }
 }
 
+int main() {
+    test_check_prefix();
+    test_handle_state_0();
+    test_handle_state_1();
+    test_handle_state_2();
+    test_extract();
+    return 0;
+}
