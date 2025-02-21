@@ -5,38 +5,16 @@ use redis::aio::MultiplexedConnection;
 use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
 
-use crate::{link::{self, LinkStatus}, recipe, word::{self, WordStatus}, BoxError};
+use crate::{link::{self, LinkStatus}, recipe, BoxError};
 
-#[tracing::instrument(skip(redis_words, redis_links, redis_recipes, mysql))]
+#[tracing::instrument(skip(redis_links, redis_recipes, mysql))]
 #[must_use]
 async fn update(
-    redis_words: MultiplexedConnection, 
     redis_links: MultiplexedConnection, 
     redis_recipes: MultiplexedConnection, 
     mysql: Pool<MySql>,
 ) -> Result<(), BoxError> {
     let timestamp = chrono::offset::Utc::now();
-
-    query("INSERT INTO word_statistic (
-timestamp, waiting_for_generation, generating, generation_failed, generation_complete, waiting_for_classification,
-classifying, classification_failed, classified_as_invalid, waiting_for_search, searching, search_failed, search_complete
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(timestamp)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForGeneration).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::Generating).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::GenerationFailed).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::GenerationComplete).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForClassification).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::Classifying).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::ClassificationFailed).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::ClassifiedAsInvalid).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::WaitingForSearch).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::Searching).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::SearchFailed).await? as i32)
-        .bind(word::words_with_status(redis_words.clone(), WordStatus::SearchComplete).await? as i32)
-        .execute(&mysql)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
 
     query("INSERT INTO link_statistic (
 timestamp, waiting_for_processing, processing, download_failed, extraction_failed, parsing_failed, processed, total_content_size
@@ -68,7 +46,6 @@ timestamp, recipe_count
 }
 
 pub async fn run(
-    redis_words: MultiplexedConnection, 
     redis_links: MultiplexedConnection, 
     redis_recipes: MultiplexedConnection, 
     mysql: Pool<MySql>
@@ -80,7 +57,7 @@ pub async fn run(
     loop {
         interval.tick().await;
 
-        if let Err(err) = update(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), mysql.clone()).await {
+        if let Err(err) = update(redis_links.clone(), redis_recipes.clone(), mysql.clone()).await {
             warn!("Error while updating statistics: {} (source: {:?})", err, err.source());
         }
     }

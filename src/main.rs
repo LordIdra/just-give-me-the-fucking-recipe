@@ -5,7 +5,7 @@ use std::io::Read;
 
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
-use log::{info, trace, warn};
+use log::info;
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
 use serde::Deserialize;
@@ -14,14 +14,11 @@ use tokio::net::TcpListener;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
-use word::{classifier, generator, WordStatus};
 
-mod gpt;
 mod link;
 mod link_blacklist;
 mod recipe;
 mod statistic;
-mod word;
 
 type BoxError = Box<dyn Error + Send>;
 
@@ -59,7 +56,6 @@ struct Args {
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    redis_words: MultiplexedConnection,
     #[allow(unused)]
     redis_links: MultiplexedConnection,
     #[allow(unused)]
@@ -98,12 +94,6 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    let redis_words = redis::Client::open("redis://127.0.0.1:6380")
-        .unwrap()
-        .get_multiplexed_tokio_connection()
-        .await
-        .unwrap();
-
     let redis_links = redis::Client::open("redis://127.0.0.1:6381")
         .unwrap()
         .get_multiplexed_tokio_connection()
@@ -116,17 +106,12 @@ async fn main() {
         .await
         .unwrap();
 
-    word::reset_tasks(redis_words.clone()).await.expect("Failed to reset word tasks");
     link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
 
-    tokio::spawn(classifier::run(redis_words.clone(), args.openai_key.clone()));
-    tokio::spawn(generator::run(redis_words.clone(), args.openai_key));
-    //tokio::spawn(searcher::run(redis_words.clone(), redis_links.clone(), args.serper_key));
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(redis_words.clone(), redis_links.clone(), redis_recipes.clone(), mysql));
+    tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql));
 
     let state = AppState {
-        redis_words,
         redis_links,
         redis_recipes,
     };
@@ -142,21 +127,21 @@ async fn main() {
 
 #[tracing::instrument(skip(state))]
 async fn submit_keyword(State(state): State<AppState>, Json(request): Json<SubmitKeyword>) -> impl IntoResponse {
-    match word::add(state.redis_words, &request.keyword, None, 0.0, WordStatus::WaitingForClassification).await {
-        Ok(was_added) => {
-            if was_added {
-                trace!("Added new input {}", request.keyword);
-                StatusCode::OK
-            } else {
-                trace!("Rejected duplicate new input {}", request.keyword);
-                StatusCode::CONFLICT
-            }
-        },
-        Err(err) => {
-            warn!("Error while submitting keyword: {} (source: {:?})", err, err.source());
-            StatusCode::INTERNAL_SERVER_ERROR
-        },
-    }
-    
+    todo!();
+    //match word::add(state.redis_words, &request.keyword, None, 0.0, WordStatus::WaitingForClassification).await {
+    //    Ok(was_added) => {
+    //        if was_added {
+    //            trace!("Added new input {}", request.keyword);
+    //            StatusCode::OK
+    //        } else {
+    //            trace!("Rejected duplicate new input {}", request.keyword);
+    //            StatusCode::CONFLICT
+    //        }
+    //    },
+    //    Err(err) => {
+    //        warn!("Error while submitting keyword: {} (source: {:?})", err, err.source());
+    //        StatusCode::INTERNAL_SERVER_ERROR
+    //    },
+    //}
 }
 
