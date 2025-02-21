@@ -3,6 +3,16 @@
 #include <string.h>
 
 
+//let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
+//    .dot_matches_new_line(true)
+//    .build()
+//    .unwrap();
+//
+//let schema_regex = RegexBuilder::new(r#"\{.{0,1000}?(schema|("@type": "Recipe")).{0,1000}?@type.*\}"#)
+//    .dot_matches_new_line(true)
+//    .build()
+//    .unwrap();
+
 int check_prefix(char* actual, char* expected) {
     int i = 0;
     for (; expected[i] != 0 && actual[i] != 0 && expected[i] == actual[i]; i++);
@@ -176,6 +186,7 @@ char* extract(char* input) {
 
         if (state == 3) {
             int size = (current - match_start) + 1;
+            printf("FUCK FUCK FUCK %i", size);
             char* buffer = (char*) malloc(size);
             memcpy(buffer, match_start, size);
             return buffer;
@@ -191,13 +202,4 @@ void test_extract() {
     }
 
 }
-
-//int main() {
-//    test_check_prefix();
-//    test_handle_state_0();
-//    test_handle_state_1();
-//    test_handle_state_2();
-//    test_extract();
-//    return 1;
-//}
 
