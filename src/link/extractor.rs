@@ -12,12 +12,12 @@ mod c_extractor {
     
     pub fn extract_wrapper(input: &str) -> Option<String> {
         unsafe {
-            let input = CString::new(input).unwrap();
+            let input = CString::new(input).ok().unwrap();
             let output = extract(input.as_ptr());
             if output.is_null() {
                 None
             } else {
-                let result = str::from_utf8(CString::from_raw(output).to_bytes()).ok().unwrap().to_string();
+                let result = str::from_utf8(CString::from_raw(output).to_bytes()).unwrap().to_string();
                 Some(result)
             }
         }
