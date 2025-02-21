@@ -33,8 +33,6 @@ impl Error for UnexpectedStatusCodeErr {}
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(long)]
-    port: usize,
-    #[arg(long)]
     proxy: String,
     #[arg(long)]
     crt_file: String,
