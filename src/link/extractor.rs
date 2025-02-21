@@ -12,6 +12,9 @@ mod c_extractor {
     
     pub fn extract_wrapper(input: &str) -> Option<String> {
         unsafe {
+            let input: String = input.chars()
+                .filter(|&c| c != '\0')
+                .collect();
             let input = CString::new(input).unwrap();
             let output = extract(input.as_ptr());
             if output.is_null() {
