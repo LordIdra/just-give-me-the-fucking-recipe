@@ -18,6 +18,7 @@ mod c_extractor {
                 None
             } else {
                 let result = str::from_utf8(CString::from_raw(output).to_bytes()).unwrap().to_string();
+                println!("{}", result);
                 Some(result)
             }
         }
