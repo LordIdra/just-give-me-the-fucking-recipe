@@ -360,7 +360,7 @@ pub async fn process_extract(
     contents: String,
     link: String
 ) -> Result<Option<Value>, BoxError> {
-    let extracted = extractor::extract(&contents)
+    let extracted = extractor::extract(&link, &contents)
         .await;
 
     if let Err(err) = extracted {

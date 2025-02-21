@@ -1,3 +1,4 @@
+use log::error;
 use serde_json::Value;
 
 use crate::BoxError;
@@ -28,7 +29,7 @@ mod c_extractor {
 }
 
 #[tracing::instrument(skip(contents))]
-pub async fn extract(contents: &str) -> Result<Option<Value>, BoxError> {
+pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxError> {
     //let script_regex = RegexBuilder::new(r"<script.*?>(.*?)<\/script>")
     //    .dot_matches_new_line(true)
     //    .build()
@@ -40,6 +41,7 @@ pub async fn extract(contents: &str) -> Result<Option<Value>, BoxError> {
     //    .unwrap();
 
     let Some(schema) = c_extractor::extract_wrapper(contents) else {
+        error!(link);
         return Ok(None);
     };
 
