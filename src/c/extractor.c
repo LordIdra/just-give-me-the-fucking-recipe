@@ -81,7 +81,7 @@ void test_handle_state_0() {
 }
 
 // State 1: Looking for a 'schema' or '"@type": "Recipe"', and reset to state 0 on </script>
-int handle_state_1(char** current, char** match_start) {
+int handle_state_1(char** current) {
     char* string1 = "</script";
     char* string2 = "schema";
     char* string3 = "\"@type\": \"Recipe\"";
@@ -105,27 +105,27 @@ void test_handle_state_1() {
         char string[] = "";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_1 1: %i\n", handle_state_1(&current, &match_start) == -1);
+        printf("test_handle_state_1 1: %i\n", handle_state_1(&current) == -1);
     }
 
     {
         char string[] = "bruh";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_1 2: %i\n", handle_state_1(&current, &match_start) == -1);
+        printf("test_handle_state_1 2: %i\n", handle_state_1(&current) == -1);
     }
 
     {
         char string[] = "bruh thisn schema rurz</script>";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_1 3: %i\n", handle_state_1(&current, &match_start) == 2);
+        printf("test_handle_state_1 3: %i\n", handle_state_1(&current) == 2);
         printf("test_handle_state_1 3: %i\n", *current == 's');
     }
 }
 
 // State 2: Looking for a </script>
-int handle_state_2(char** current, char** match_start) {
+int handle_state_2(char** current) {
     char* string = "</script";
 
     while (!check_prefix(*current, string)) {
@@ -145,21 +145,21 @@ void test_handle_state_2() {
         char string[] = "";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_2 1: %i\n", handle_state_2(&current, &match_start) == -1);
+        printf("test_handle_state_2 1: %i\n", handle_state_2(&current) == -1);
     }
 
     {
         char string[] = "bruh";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_2 2: %i\n", handle_state_2(&current, &match_start) == -1);
+        printf("test_handle_state_2 2: %i\n", handle_state_2(&current) == -1);
     }
 
     {
         char string[] = "bruh thisn schema rurz</script>";
         char* current = string;
         char* match_start = NULL;
-        printf("test_handle_state_2 3: %i\n", handle_state_2(&current, &match_start) == 3);
+        printf("test_handle_state_2 3: %i\n", handle_state_2(&current) == 3);
         printf("test_handle_state_2 3: %i\n", *current == 'z');
     }
 }
@@ -172,8 +172,8 @@ char* extract(char* input) {
     while (1) {
         switch (state) {
             case 0: state = handle_state_0(&current, &match_start); break;
-            case 1: state = handle_state_1(&current, &match_start); break;
-            case 2: state = handle_state_2(&current, &match_start); break;
+            case 1: state = handle_state_1(&current); break;
+            case 2: state = handle_state_2(&current); break;
         }
 
         if (state == -1) {
