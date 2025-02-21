@@ -51,7 +51,7 @@ struct Args {
     #[arg(long)]
     redis_links_url: String,
     #[arg(long)]
-    redis_recipe_url: String,
+    redis_recipes_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let redis_recipes = redis::Client::open(args.redis_recipe_url)
+    let redis_recipes = redis::Client::open(args.redis_recipes_url)
         .unwrap()
         .get_multiplexed_tokio_connection()
         .await
