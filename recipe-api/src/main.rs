@@ -1,5 +1,5 @@
 use clap::Parser;
-use endpoints::submit_link::submit_link;
+use endpoints::{parse_ingredients::parse_ingredients, submit_link::submit_link};
 use log::info;
 use redis::aio::MultiplexedConnection;
 use tokio::net::TcpListener;
@@ -8,6 +8,7 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_redoc::{Redoc, Servable};
 use crate::endpoints::submit_link::__path_submit_link;
+use crate::endpoints::parse_ingredients::__path_parse_ingredients;
 
 pub mod endpoints;
 
@@ -61,7 +62,7 @@ async fn main() {
     };
 
     let api_router = OpenApiRouter::new()
-        .routes(routes!(submit_link))
+        .routes(routes!(submit_link, parse_ingredients))
         .with_state(state);
 
 
