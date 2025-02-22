@@ -1,26 +1,27 @@
-use std::time::Duration;
+use std::slice::Iter;
 
-use chrono::NaiveDate;
-use redis::{aio::MultiplexedConnection, AsyncCommands};
+use redis::{aio::MultiplexedConnection, AsyncCommands, ErrorKind, FromRedisValue, RedisError, RedisResult, Value};
+use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::BoxError;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Debug, Clone, ToSchema)]
 pub struct Recipe {
     pub link: String,
     pub title: String,
     pub description: String,
     pub ingredients: Vec<String>,
     pub instructions: Vec<String>,
-    pub date: Option<NaiveDate>,
+    pub date: Option<String>,
     pub keywords: Vec<String>,
     pub authors: Vec<String>,
     pub images: Vec<String>,
     pub rating: Option<f32>,
     pub rating_count: Option<i32>,
-    pub prep_time_seconds: Option<Duration>,
-    pub cook_time_seconds: Option<Duration>,
-    pub total_time_seconds: Option<Duration>,
+    pub prep_time_seconds: Option<u64>,
+    pub cook_time_seconds: Option<u64>,
+    pub total_time_seconds: Option<u64>,
     pub servings: Option<String>,
     pub calories: Option<f32>,
     pub carbohydrates: Option<f32>,
@@ -31,6 +32,49 @@ pub struct Recipe {
     pub saturated_fat: Option<f32>,
     pub sodium: Option<f32>,
     pub sugar: Option<f32>,
+}
+
+fn get_redis_value<T: FromRedisValue>(iter: &mut Iter<Value>, field: &str) -> Result<T, RedisError> {
+    match iter.next().map(T::from_redis_value) {
+        Some(Ok(v)) => Ok(v),
+        _ => Err(RedisError::from((ErrorKind::TypeError, "Failed to get field", field.to_owned()))),
+    }
+}
+
+impl FromRedisValue for Recipe {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        let Value::Array(ref items) = *v else {
+            return Err(RedisError::from((ErrorKind::TypeError, "Expected to get iterable")));
+        };
+        let mut iter = items.iter();
+
+        Ok(Recipe {
+            link: get_redis_value(&mut iter, "link")?,
+            title: get_redis_value(&mut iter, "title")?,
+            description: get_redis_value(&mut iter, "description")?,
+            ingredients: get_redis_value(&mut iter, "ingredients")?,
+            instructions: get_redis_value(&mut iter, "instructions")?,
+            date: get_redis_value(&mut iter, "date")?,
+            keywords: get_redis_value(&mut iter, "keywords")?,
+            authors: get_redis_value(&mut iter, "authors")?,
+            images: get_redis_value(&mut iter, "images")?,
+            rating: get_redis_value(&mut iter, "rating")?,
+            rating_count: get_redis_value(&mut iter, "rating-count")?,
+            prep_time_seconds: get_redis_value(&mut iter, "prep_time_seconds")?,
+            cook_time_seconds: get_redis_value(&mut iter, "cook_time_seconds")?,
+            total_time_seconds: get_redis_value(&mut iter, "total_time_seconds")?,
+            servings: get_redis_value(&mut iter, "servings")?,
+            calories: get_redis_value(&mut iter, "calories")?,
+            carbohydrates: get_redis_value(&mut iter, "carbohydrates")?,
+            cholesterol: get_redis_value(&mut iter, "cholesterol")?,
+            fat: get_redis_value(&mut iter, "fat")?,
+            fiber: get_redis_value(&mut iter, "fiber")?,
+            protein: get_redis_value(&mut iter, "protein")?,
+            saturated_fat: get_redis_value(&mut iter, "saturated_fat")?,
+            sodium: get_redis_value(&mut iter, "sodium")?,
+            sugar: get_redis_value(&mut iter, "sugar")?,
+        })
+    }
 }
 
 impl Recipe {
@@ -196,9 +240,9 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
     recipe.date.map(|v| pipe.set(key_recipe_date(id), v.to_string()));
     recipe.rating.map(|v| pipe.set(key_recipe_rating(id), v));
     recipe.rating_count.map(|v| pipe.set(key_recipe_rating_count(id), v));
-    recipe.prep_time_seconds.map(|v| pipe.set(key_recipe_prep_time_seconds(id), v.as_secs().to_string()));
-    recipe.cook_time_seconds.map(|v| pipe.set(key_recipe_cook_time_seconds(id), v.as_secs().to_string()));
-    recipe.total_time_seconds.map(|v| pipe.set(key_recipe_total_time_seconds(id), v.as_secs().to_string()));
+    recipe.prep_time_seconds.map(|v| pipe.set(key_recipe_prep_time_seconds(id), v));
+    recipe.cook_time_seconds.map(|v| pipe.set(key_recipe_cook_time_seconds(id), v));
+    recipe.total_time_seconds.map(|v| pipe.set(key_recipe_total_time_seconds(id), v));
     recipe.servings.map(|v| pipe.set(key_recipe_servings(id), v));
     recipe.calories.map(|v| pipe.set(key_recipe_calories(id), v));
     recipe.carbohydrates.map(|v| pipe.set(key_recipe_carbohydrates(id), v));
@@ -278,11 +322,38 @@ async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Re
 
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
-pub async fn ingredients(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Vec<String>, BoxError> {
-    let ingredients: Vec<String> = redis_recipes.lrange(key_recipe_ingredients(id), 0, -1)
-        .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
+pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Recipe, BoxError> {
+    let mut pipe = redis::pipe();
 
-    Ok(ingredients)
+    pipe.get(key_recipe_link(id));
+    pipe.get(key_recipe_title(id));
+    pipe.get(key_recipe_description(id));
+    pipe.lrange(key_recipe_ingredients(id), 0, -1);
+    pipe.lrange(key_recipe_instructions(id), 0, -1);
+    pipe.get(key_recipe_date(id));
+    pipe.lrange(key_recipe_keywords(id), 0, -1);
+    pipe.lrange(key_recipe_authors(id), 0, -1);
+    pipe.lrange(key_recipe_images(id), 0, -1);
+    pipe.get(key_recipe_rating(id));
+    pipe.get(key_recipe_rating_count(id));
+    pipe.get(key_recipe_prep_time_seconds(id));
+    pipe.get(key_recipe_cook_time_seconds(id));
+    pipe.get(key_recipe_total_time_seconds(id));
+    pipe.get(key_recipe_servings(id));
+    pipe.get(key_recipe_calories(id));
+    pipe.get(key_recipe_carbohydrates(id));
+    pipe.get(key_recipe_cholesterol(id));
+    pipe.get(key_recipe_fat(id));
+    pipe.get(key_recipe_fiber(id));
+    pipe.get(key_recipe_protein(id));
+    pipe.get(key_recipe_saturated_fat(id));
+    pipe.get(key_recipe_sodium(id));
+    pipe.get(key_recipe_sugar(id));
+
+    let recipe = pipe.query_async(&mut redis_recipes)
+        .await
+        .unwrap();
+
+    Ok(recipe)
 }
 

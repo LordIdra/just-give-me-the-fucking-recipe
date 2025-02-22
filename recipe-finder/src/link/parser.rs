@@ -82,7 +82,7 @@ fn description(v: &Value) -> Option<String> {
         .map(|v| v.to_owned())
 }
 
-fn date(v: &Value) -> Option<NaiveDate> {
+fn date(v: &Value) -> Option<String> {
     let mut date_str = v.get("datePublished")
         .or(v.get("dateCreated"))?
         .as_str()?
@@ -113,6 +113,7 @@ fn date(v: &Value) -> Option<NaiveDate> {
     format1
         .or(format2)
         .or(format3)
+        .map(|v| v.format("%Y-%m-%d").to_string())
 }
 
 fn servings(v: &Value) -> Option<String> {
@@ -176,7 +177,10 @@ fn prep_time(v: &Value) -> Option<Duration> {
     v.get("prepTime")
         .and_then(|v| v.as_str())
         .and_then(|v| iso8601::duration(v).ok())
-        .map(|v| v.into())
+        .map(|v| match v {
+            iso8601::Duration::YMDHMS { year, month, day, hour, minute, second, millisecond } => todo!(),
+            iso8601::Duration::Weeks(_) => None,
+        })
 }
 
 fn cook_time(v: &Value) -> Option<Duration> {

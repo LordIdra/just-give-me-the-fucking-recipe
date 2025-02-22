@@ -1,6 +1,6 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use ingredient::Ingredient;
-use recipe_common::recipe;
+use recipe_common::recipe::{self, Recipe};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -14,6 +14,7 @@ pub struct ParseIngredientRequest {
 
 #[derive(Debug, Serialize, ToSchema)]
 struct ParseIngredientSuccessResponse {
+    id: u64,
     ingredients: Vec<String>,
 }
 
@@ -33,34 +34,20 @@ struct ParseIngredientErrorResponse {
     ),
 )]
 #[tracing::instrument(skip(state))]
-pub async fn parse_ingredients(
+pub async fn get_recipe(
     State(state): State<AppState>, 
     Json(request): Json<ParseIngredientRequest>
 ) -> impl IntoResponse {
-    match recipe::ingredients(state.redis_recipes, request.id).await {
+    match recipe::get_recipe(state.redis_recipes, request.id).await {
         Err(err) => (
             StatusCode::BAD_REQUEST, 
             Json(ParseIngredientErrorResponse { err: err.to_string() }),
         ).into_response(),
 
-        Ok(ingredients) => {
-            let mut parsed = vec![];
-            for ingredient in ingredients {
-                match Ingredient::try_from(ingredient.as_str()) {
-                    Err(err) => return (
-                        StatusCode::BAD_REQUEST, 
-                        Json(ParseIngredientErrorResponse { err: err.to_string() }),
-                    ).into_response(),
-
-                    Ok(ok) => parsed.push(ok.to_string()),
-                }
-            }
-
-            (
-                StatusCode::OK,
-                Json(ParseIngredientSuccessResponse { ingredients: parsed })
-            ).into_response()
-        }
+        Ok(recipe) => (
+            StatusCode::OK,
+            Json(recipe),
+        ).into_response()
     }
 }
 
