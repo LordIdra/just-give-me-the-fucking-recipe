@@ -87,6 +87,6 @@ async fn main() {
 
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
     // await to prevent program from exiting
-    tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql)).await;
+    let _ = tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql)).await;
 }
 
