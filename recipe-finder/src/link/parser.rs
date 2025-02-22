@@ -1,11 +1,26 @@
-use std::time::Duration;
-
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::NaiveDateTime;
 use regex::Regex;
 use serde_json::Value;
 use url::Url;
 
 use recipe_common::recipe::Recipe;
+
+fn duration_to_seconds(duration: iso8601::Duration) -> Option<u64> {
+    match duration {
+        iso8601::Duration::YMDHMS { year, month, day, hour, minute, second, millisecond } => {
+            if year != 0 || month != 0 {
+                return None
+            }
+
+            Some((1000 * millisecond
+                + second
+                + 60 * minute
+                + 60 * 60 * hour
+                + 60 * 60 * 24 * day) as u64)
+        }
+        iso8601::Duration::Weeks(_) => None,
+    }
+}
 
 fn title(v: &Value) -> Option<String> {
     v.get("name")
@@ -173,28 +188,25 @@ fn servings(v: &Value) -> Option<String> {
         .or(text_number)
 }
 
-fn prep_time(v: &Value) -> Option<Duration> {
+fn prep_time(v: &Value) -> Option<u64> {
     v.get("prepTime")
         .and_then(|v| v.as_str())
         .and_then(|v| iso8601::duration(v).ok())
-        .map(|v| match v {
-            iso8601::Duration::YMDHMS { year, month, day, hour, minute, second, millisecond } => todo!(),
-            iso8601::Duration::Weeks(_) => None,
-        })
+        .and_then(duration_to_seconds)
 }
 
-fn cook_time(v: &Value) -> Option<Duration> {
+fn cook_time(v: &Value) -> Option<u64> {
     v.get("cookTime")
         .and_then(|v| v.as_str())
         .and_then(|v| iso8601::duration(v).ok())
-        .map(|v| v.into())
+        .and_then(duration_to_seconds)
 }
 
-fn total_time(v: &Value) -> Option<Duration> {
+fn total_time(v: &Value) -> Option<u64> {
     v.get("totalTime")
         .and_then(|v| v.as_str())
         .and_then(|v| iso8601::duration(v).ok())
-        .map(|v| v.into())
+        .and_then(duration_to_seconds)
 }
 
 fn ingredients(v: &Value) -> Vec<String> {
@@ -293,7 +305,8 @@ fn keywords(v: &Value) -> Vec<String> {
 }
 
 fn calories(v: &Value) -> Option<f32> {
-    v.get("calories")
+    v.get("nutrition")
+        .and_then(|v| v.get("calories"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("kcal", ""))
         .map(|v| v.replace("calories", ""))
@@ -302,7 +315,8 @@ fn calories(v: &Value) -> Option<f32> {
 }
 
 fn carbohydrates(v: &Value) -> Option<f32> {
-    v.get("carbohydrateContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("carbohydrateContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
@@ -310,7 +324,8 @@ fn carbohydrates(v: &Value) -> Option<f32> {
 }
 
 fn cholesterol(v: &Value) -> Option<f32> {
-    v.get("cholesterolContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("cholesterolContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("mg", ""))
         .map(|v| v.trim().to_owned())
@@ -318,7 +333,8 @@ fn cholesterol(v: &Value) -> Option<f32> {
 }
 
 fn fat(v: &Value) -> Option<f32> {
-    v.get("fatContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("fatContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
@@ -326,7 +342,8 @@ fn fat(v: &Value) -> Option<f32> {
 }
 
 fn fiber(v: &Value) -> Option<f32> {
-    v.get("fiberContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("fiberContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
@@ -334,7 +351,8 @@ fn fiber(v: &Value) -> Option<f32> {
 }
 
 fn protein(v: &Value) -> Option<f32> {
-    v.get("proteinContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("proteinContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
@@ -342,14 +360,16 @@ fn protein(v: &Value) -> Option<f32> {
 }
 
 fn saturated_fat(v: &Value) -> Option<f32> {
-    v.get("saturatedFatContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("saturatedFatContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
         .and_then(|v| v.parse::<f32>().ok())}
 
 fn sodium(v: &Value) -> Option<f32> {
-    v.get("sodiumContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("sodiumContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("mg", ""))
         .map(|v| v.trim().to_owned())
@@ -357,7 +377,8 @@ fn sodium(v: &Value) -> Option<f32> {
 }
 
 fn sugar(v: &Value) -> Option<f32> {
-    v.get("sugarContent")
+    v.get("nutrition")
+        .and_then(|v| v.get("sugarContent"))
         .and_then(|v| v.as_str())
         .map(|v| v.replace("g", ""))
         .map(|v| v.trim().to_owned())
