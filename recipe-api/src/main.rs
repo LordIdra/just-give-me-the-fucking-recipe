@@ -1,13 +1,15 @@
-use axum::{routing::post, Router};
 use clap::Parser;
 use endpoints::submit_link::submit_link;
 use log::info;
 use redis::aio::MultiplexedConnection;
-use serde::Deserialize;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_redoc::{Redoc, Servable};
+use crate::endpoints::submit_link::__path_submit_link;
 
-mod endpoints;
+pub mod endpoints;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -57,13 +59,22 @@ async fn main() {
         redis_links,
         redis_recipes,
     };
-    
-    let app = Router::new()
-        .route("/submit_link", post(submit_link))
+
+    let api_router = OpenApiRouter::new()
+        .routes(routes!(submit_link))
         .with_state(state);
+
+
+    #[derive(OpenApi)]
+    pub struct ApiDocs;
+
+    let (main_router, api) = OpenApiRouter::with_openapi(ApiDocs::openapi())
+        .nest("/api/v1", api_router)
+        .split_for_parts();
+    let main_router = main_router.merge(Redoc::with_url("/docs", api.clone()));
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await.unwrap();
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, main_router.into_make_service()).await.unwrap();
 }
 

@@ -5,7 +5,7 @@ use regex::Regex;
 use serde_json::Value;
 use url::Url;
 
-use crate::recipe::Recipe;
+use recipe_common::recipe::Recipe;
 
 fn title(v: &Value) -> Option<String> {
     v.get("name")

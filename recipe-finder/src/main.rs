@@ -5,7 +5,6 @@ use std::io::Read;
 
 use clap::Parser;
 use log::info;
-use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, StatusCode};
 use sqlx::mysql::MySqlPoolOptions;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -13,11 +12,7 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 mod link;
-mod link_blacklist;
-mod recipe;
 mod statistic;
-
-type BoxError = Box<dyn Error + Send>;
 
 #[derive(Debug)]
 pub struct UnexpectedStatusCodeErr(StatusCode);
@@ -42,14 +37,6 @@ struct Args {
     redis_links_url: String,
     #[arg(long)]
     redis_recipes_url: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct AppState {
-    #[allow(unused)]
-    redis_links: MultiplexedConnection,
-    #[allow(unused)]
-    redis_recipes: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -96,14 +83,9 @@ async fn main() {
         .await
         .unwrap();
 
-    link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
+    recipe_common::link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
 
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
     tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql));
-
-    let state = AppState {
-        redis_links,
-        redis_recipes,
-    };
 }
 

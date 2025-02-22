@@ -1,12 +1,11 @@
+use recipe_common::BoxError;
 use serde_json::Value;
-
-use crate::BoxError;
 
 mod c_extractor {
     use std::{ffi::{c_char, CStr, CString}, str};
 
     #[link(name = "extractor")]
-    extern {
+    unsafe extern {
         fn extract(input: *const c_char) -> *mut c_char;
     }
     

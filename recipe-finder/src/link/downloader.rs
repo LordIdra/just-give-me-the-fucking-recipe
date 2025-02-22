@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::{Arc, LazyLock}, time::{Duration, Instant}};
 
-use axum::http::HeaderMap;
+use recipe_common::{link, BoxError};
 use redis::aio::MultiplexedConnection;
-use reqwest::{Client, Method};
+use reqwest::{header::HeaderMap, Client, Method};
 use tokio::{sync::{Mutex, Semaphore}, time::sleep};
 
-use crate::{link, BoxError, UnexpectedStatusCodeErr};
+use crate::UnexpectedStatusCodeErr;
 
 const REQUEST_INTERVAL_FOR_ONE_SITE: Duration = Duration::from_millis(4000);
 const ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS: i32 = 4000;

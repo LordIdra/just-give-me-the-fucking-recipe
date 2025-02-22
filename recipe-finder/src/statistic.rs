@@ -1,11 +1,10 @@
 use std::time::Duration;
 
 use log::{info, warn};
+use recipe_common::{link::{links_with_status, total_content_size, LinkStatus}, recipe::recipe_count, BoxError};
 use redis::aio::MultiplexedConnection;
 use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
-
-use crate::{link::{self, LinkStatus}, recipe, BoxError};
 
 #[tracing::instrument(skip(redis_links, redis_recipes, mysql))]
 #[must_use]
@@ -20,13 +19,13 @@ async fn update(
 timestamp, waiting_for_processing, processing, download_failed, extraction_failed, parsing_failed, processed, total_content_size
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(timestamp)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i64)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i64)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i64)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i64)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::ParsingFailed).await? as i64)
-        .bind(link::links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i64)
-        .bind(link::total_content_size(redis_links.clone()).await? as u64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::Waiting).await? as i64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::Processing).await? as i64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::DownloadFailed).await? as i64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::ExtractionFailed).await? as i64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::ParsingFailed).await? as i64)
+        .bind(links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i64)
+        .bind(total_content_size(redis_links.clone()).await? as u64)
         .execute(&mysql)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
@@ -35,7 +34,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
 timestamp, recipe_count
 ) VALUES (?, ?)")
         .bind(timestamp)
-        .bind(recipe::recipe_count(redis_recipes.clone()).await? as i64)
+        .bind(recipe_count(redis_recipes.clone()).await? as i64)
         .execute(&mysql)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;

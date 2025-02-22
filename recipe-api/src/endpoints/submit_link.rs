@@ -1,30 +1,65 @@
-use axum::{extract::State, response::IntoResponse, Json};
-use serde::Deserialize;
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use recipe_common::link::{self};
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 
-#[derive(Debug, Deserialize)]
-struct SubmitLink {
-    keyword: String,
+fn priority_default() -> f32 {
+    0.0
 }
 
-#[tracing::instrument(skip(state))]
-pub async fn submit_link(State(state): State<AppState>, Json(request): Json<SubmitLink>) -> impl IntoResponse {
-    state.redis_links
+fn remaining_follows_default() -> i32 {
+    2
+}
 
-    match word::add(state.redis_words, &request.keyword, None, 0.0, WordStatus::WaitingForClassification).await {
-        Ok(was_added) => {
-            if was_added {
-                trace!("Added new input {}", request.keyword);
-                StatusCode::OK
-            } else {
-                trace!("Rejected duplicate new input {}", request.keyword);
-                StatusCode::CONFLICT
-            }
-        },
-        Err(err) => {
-            warn!("Error while submitting keyword: {} (source: {:?})", err, err.source());
-            StatusCode::INTERNAL_SERVER_ERROR
-        },
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct SubmitLinkRequest {
+    #[param(example = "https://www.indianhealthyrecipes.com/cauliflower-curry-recipe/")]
+    link: String,
+    #[serde(default = "priority_default")]
+    #[param(default = 0.0)]
+    priority: f32,
+    #[serde(default = "remaining_follows_default")]
+    #[param(default = 2)]
+    remaining_follows: i32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct SubmitLinkSuccessResponse {
+    added: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct SubmitLinkErrorResponse {
+    err: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/submit_link",
+    description = "Add a link to the waiting queue, with an optional priority and optional remaining follows (how deep we should follow any links on the page)",
+    params(SubmitLinkRequest),
+    responses(
+        (status = OK, body = SubmitLinkSuccessResponse),
+        (status = BAD_REQUEST, body = SubmitLinkErrorResponse)
+    ),
+)]
+#[tracing::instrument(skip(state))]
+pub async fn submit_link(
+    State(state): State<AppState>, 
+    Json(request): Json<SubmitLinkRequest>
+) -> impl IntoResponse {
+    match link::add(state.redis_links, &request.link, None, request.priority, request.remaining_follows).await {
+        Err(err) => (
+            StatusCode::BAD_REQUEST, 
+            Json(SubmitLinkErrorResponse { err: err.to_string() }),
+        ).into_response(),
+
+        Ok(added) => (
+            StatusCode::OK,
+            Json(SubmitLinkSuccessResponse { added }),
+        ).into_response(),
     }
 }
+
