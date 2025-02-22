@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use ingredient::Ingredient;
 use recipe_common::recipe;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -42,10 +43,28 @@ pub async fn parse_ingredients(
             Json(ParseIngredientErrorResponse { err: err.to_string() }),
         ).into_response(),
 
-        Ok(recipe) => (
-            StatusCode::OK,
-            Json(ParseIngredientSuccessResponse { ingredients: recipe.ingredients }),
-        ).into_response()
+        Ok(recipe) => {
+            let ingredients: Result<Vec<Ingredient>, _> = recipe.ingredients.iter()
+                .map(|v| Ingredient::try_from(v.as_str()))
+                .collect();
+
+            match ingredients {
+                Err(err) => (
+                    StatusCode::BAD_REQUEST, 
+                    Json(ParseIngredientErrorResponse { err: err.to_string() }),
+                ).into_response(),
+                Ok(ingredients) => {
+                    let ingredients = ingredients.into_iter()
+                        .map(|v| v.to_string())
+                        .collect();
+
+                    (
+                        StatusCode::OK,
+                        Json(ParseIngredientSuccessResponse { ingredients }),
+                    ).into_response()
+                }
+            }
+        }
     }
 }
 
