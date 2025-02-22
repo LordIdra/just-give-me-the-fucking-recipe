@@ -13,7 +13,6 @@ pub struct ParseIngredientRequest {
 
 #[derive(Debug, Serialize, ToSchema)]
 struct ParseIngredientSuccessResponse {
-    id: u64,
     ingredients: Vec<String>,
 }
 
@@ -26,7 +25,7 @@ struct ParseIngredientErrorResponse {
 #[utoipa::path(
     post,
     path = "/parse_ingredients",
-    description = "Parse a link's ingredient list. The link must have already been indexed.",
+    description = "Parse a recipe's ingredient list.",
     responses(
         (status = OK, body = ParseIngredientSuccessResponse),
         (status = BAD_REQUEST, body = ParseIngredientErrorResponse)
@@ -45,7 +44,7 @@ pub async fn parse_ingredients(
 
         Ok(recipe) => (
             StatusCode::OK,
-            Json(recipe),
+            Json(ParseIngredientSuccessResponse { ingredients: recipe.ingredients }),
         ).into_response()
     }
 }
