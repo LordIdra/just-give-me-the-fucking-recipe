@@ -279,7 +279,7 @@ async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Re
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
 pub async fn ingredients(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Vec<String>, BoxError> {
-    let ingredients: Vec<String> = redis_recipes.smembers(key_recipe_ingredients(id))
+    let ingredients: Vec<String> = redis_recipes.lrange(key_recipe_ingredients(id), 0, -1)
         .await
         .map_err(|err| dbg!(Box::new(err) as BoxError))?;
 
