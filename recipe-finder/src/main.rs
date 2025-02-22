@@ -45,11 +45,9 @@ async fn main() {
         .with_line_number(true)
         .with_filter(EnvFilter::new("recipe-finder=trace"));
 
-    let subscriber = tracing_subscriber::registry()
-        .with(fmt_layer);
-    #[cfg(feature = "profiling")]
-    let subscriber = subscriber.with(tracing_tracy::TracyLayer::default());
-    subscriber.init();
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .init();
 
     info!("Starting...");
 
