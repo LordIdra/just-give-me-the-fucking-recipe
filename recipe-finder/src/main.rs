@@ -86,6 +86,7 @@ async fn main() {
     recipe_common::link::reset_tasks(redis_links.clone()).await.expect("Failed to reset link tasks");
 
     tokio::spawn(link::run(redis_links.clone(), redis_recipes.clone(), args.proxy, certificates));
-    tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql));
+    // await to prevent program from exiting
+    tokio::spawn(statistic::run(redis_links.clone(), redis_recipes.clone(), mysql)).await;
 }
 
