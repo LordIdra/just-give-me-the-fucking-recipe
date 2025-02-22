@@ -64,11 +64,11 @@ fn key_recipes() -> String {
     "recipe:recipes".to_string()
 }
 
-fn key_recipe_link(id: usize) -> String {
+fn key_recipe_link(id: u64) -> String {
     format!("recipe:{id}:link")
 }
 
-fn key_recipe_title(id: usize) -> String {
+fn key_recipe_title(id: u64) -> String {
     format!("recipe:{id}:title")
 }
 
@@ -76,7 +76,7 @@ fn key_title_recipes(title: &str) -> String {
     format!("title:{title}:titles")
 }
 
-fn key_recipe_description(id: usize) -> String {
+fn key_recipe_description(id: u64) -> String {
     format!("recipe:{id}:description")
 }
 
@@ -84,87 +84,87 @@ fn key_description_recipes(description: &str) -> String {
     format!("description:{description}:recipes")
 }
 
-fn key_recipe_date(id: usize) -> String {
+fn key_recipe_date(id: u64) -> String {
     format!("recipe:{id}:date")
 }
 
-fn key_recipe_rating(id: usize) -> String {
+fn key_recipe_rating(id: u64) -> String {
     format!("recipe:{id}:rating")
 }
 
-fn key_recipe_rating_count(id: usize) -> String {
+fn key_recipe_rating_count(id: u64) -> String {
     format!("recipe:{id}:rating_count")
 }
 
-fn key_recipe_prep_time_seconds(id: usize) -> String {
+fn key_recipe_prep_time_seconds(id: u64) -> String {
     format!("recipe:{id}:prep_time_seconds")
 }
 
-fn key_recipe_cook_time_seconds(id: usize) -> String {
+fn key_recipe_cook_time_seconds(id: u64) -> String {
     format!("recipe:{id}:cook_time_seconds")
 }
 
-fn key_recipe_total_time_seconds(id: usize) -> String {
+fn key_recipe_total_time_seconds(id: u64) -> String {
     format!("recipe:{id}:total_time_seconds")
 }
 
-fn key_recipe_servings(id: usize) -> String {
+fn key_recipe_servings(id: u64) -> String {
     format!("recipe:{id}:key_servings")
 }
 
-fn key_recipe_calories(id: usize) -> String {
+fn key_recipe_calories(id: u64) -> String {
     format!("recipe:{id}:calories")
 }
 
-fn key_recipe_carbohydrates(id: usize) -> String {
+fn key_recipe_carbohydrates(id: u64) -> String {
     format!("recipe:{id}:carbohydrates")
 }
 
-fn key_recipe_cholesterol(id: usize) -> String {
+fn key_recipe_cholesterol(id: u64) -> String {
     format!("recipe:{id}:cholesterol")
 }
 
-fn key_recipe_fat(id: usize) -> String {
+fn key_recipe_fat(id: u64) -> String {
     format!("recipe:{id}:fat")
 }
 
-fn key_recipe_fiber(id: usize) -> String {
+fn key_recipe_fiber(id: u64) -> String {
     format!("recipe:{id}:fiber")
 }
 
-fn key_recipe_protein(id: usize) -> String {
+fn key_recipe_protein(id: u64) -> String {
     format!("recipe:{id}:protein")
 }
 
-fn key_recipe_saturated_fat(id: usize) -> String {
+fn key_recipe_saturated_fat(id: u64) -> String {
     format!("recipe:{id}:saturated_fat")
 }
 
-fn key_recipe_sodium(id: usize) -> String {
+fn key_recipe_sodium(id: u64) -> String {
     format!("recipe:{id}:sodium")
 }
 
-fn key_recipe_sugar(id: usize) -> String {
+fn key_recipe_sugar(id: u64) -> String {
     format!("recipe:{id}:sugar")
 }
 
-fn key_recipe_keywords(id: usize) -> String {
+fn key_recipe_keywords(id: u64) -> String {
     format!("recipe:{id}:keywords")
 }
 
-fn key_recipe_authors(id: usize) -> String {
+fn key_recipe_authors(id: u64) -> String {
     format!("recipe:{id}:authors")
 }
 
-fn key_recipe_images(id: usize) -> String {
+fn key_recipe_images(id: u64) -> String {
     format!("recipe:{id}:images")
 }
 
-fn key_recipe_ingredients(id: usize) -> String {
+fn key_recipe_ingredients(id: u64) -> String {
     format!("recipe:{id}:ingredients")
 }
 
-fn key_recipe_instructions(id: usize) -> String {
+fn key_recipe_instructions(id: u64) -> String {
     format!("recipe:{id}:ingredients")
 }
 
@@ -177,7 +177,7 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
         return Ok(false);
     }
 
-    let id: usize = redis_recipes.incr(key_next_id(), 1)
+    let id: u64 = redis_recipes.incr(key_next_id(), 1)
         .await
         .map_err(|err| Box::new(err) as BoxError)?;
 
@@ -274,5 +274,15 @@ async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Re
         .map_err(|err| dbg!(Box::new(err) as BoxError))?;
 
     Ok(recipes_with_titles.iter().any(|x| recipes_with_description.contains(x)))
+}
+
+#[tracing::instrument(skip(redis_recipes))]
+#[must_use]
+pub async fn ingredients(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Vec<String>, BoxError> {
+    let ingredients: Vec<String> = redis_recipes.smembers(key_recipe_ingredients(id))
+        .await
+        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
+
+    Ok(ingredients)
 }
 
