@@ -209,7 +209,7 @@ fn key_recipe_ingredients(id: u64) -> String {
 }
 
 fn key_recipe_instructions(id: u64) -> String {
-    format!("recipe:{id}:ingredients")
+    format!("recipe:{id}:instructions")
 }
 
 /// Returns true if added
@@ -256,35 +256,35 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
 
     if !recipe.keywords.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_keywords(id));
-        for keyword in recipe.keywords {
+        for keyword in recipe.keywords.iter().rev() {
             pipe.arg(keyword);
         }
     }
 
     if !recipe.authors.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_authors(id));
-        for author in recipe.authors {
+        for author in recipe.authors.iter().rev() {
             pipe.arg(author);
         }
     }
 
     if !recipe.images.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_images(id));
-        for image in recipe.images {
+        for image in recipe.images.iter().rev() {
             pipe.arg(image);
         }
     }
 
     if !recipe.ingredients.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_ingredients(id));
-        for ingredient in recipe.ingredients {
+        for ingredient in recipe.ingredients.iter().rev() {
             pipe.arg(ingredient);
         }
     }
 
     if !recipe.instructions.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_instructions(id));
-        for instruction in recipe.instructions {
+        for instruction in recipe.instructions.iter().rev() {
             pipe.arg(instruction);
         }
     }
