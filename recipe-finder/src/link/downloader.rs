@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::{Arc, LazyLock}, time::{Duration, Instant}};
 
-use recipe_common::{link, BoxError};
+use anyhow::Error;
+use recipe_common::link;
 use redis::aio::MultiplexedConnection;
 use reqwest::{header::HeaderMap, Client, Method};
 use tokio::{sync::{Mutex, Semaphore}, time::sleep};
@@ -33,9 +34,8 @@ pub fn headers() -> HeaderMap {
 }
 
 #[tracing::instrument(skip(redis_links, client))]
-pub async fn download(redis_links: MultiplexedConnection, client: Client, job: String) -> Result<String, BoxError> {
-    let domain = link::get_domain(redis_links.clone(), &job)
-        .await?;
+pub async fn download(redis_links: MultiplexedConnection, client: Client, job: String) -> Result<String, Error> {
+    let domain = link::get_domain(redis_links.clone(), &job).await?;
 
     let semaphore = SEMAPHORES.lock()
         .await
@@ -52,16 +52,13 @@ pub async fn download(redis_links: MultiplexedConnection, client: Client, job: S
     let response = client.request(Method::GET, job)
         .headers(headers())
         .send()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .await?;
 
     if !response.status().is_success() {
-        return Err(Box::new(UnexpectedStatusCodeErr(response.status())));
+        return Err(Box::new(UnexpectedStatusCodeErr(response.status())).into());
     }
 
-    let content = response.text()
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let content = response.text().await?;
 
     let elapsed_time = Instant::now() - start_time;
     let request_interval = REQUEST_INTERVAL_FOR_ONE_SITE + Duration::from_millis((rand::random::<f64>() * ADDITIONAL_REQUEST_INTERVAL_MAX_MILLIS as f64) as u64);

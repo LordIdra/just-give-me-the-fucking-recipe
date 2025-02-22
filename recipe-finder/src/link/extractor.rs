@@ -1,4 +1,4 @@
-use recipe_common::BoxError;
+use anyhow::Error;
 use serde_json::Value;
 
 mod c_extractor {
@@ -27,13 +27,12 @@ mod c_extractor {
 }
 
 #[tracing::instrument(skip(contents))]
-pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, BoxError> {
+pub async fn extract(link: &str, contents: &str) -> Result<Option<Value>, Error> {
     let Some(schema) = c_extractor::extract_wrapper(contents) else {
         return Ok(None);
     };
 
-    let mut schema = serde_json::from_str::<Value>(schema.as_str())
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let mut schema = serde_json::from_str::<Value>(schema.as_str())?;
 
     if let Some(graph) = schema.get("@graph") {
         if let Some(arr) = graph.as_array() {

@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
+use anyhow::Error;
 use log::{debug, info, trace, warn};
-use recipe_common::{link::{self, LinkStatus}, recipe::{self, Recipe}, BoxError};
+use recipe_common::{link::{self, LinkMissingDomainError, LinkStatus}, recipe::{self, Recipe}};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
 use serde_json::Value;
@@ -17,17 +18,14 @@ pub async fn process_download(
     redis_links: MultiplexedConnection, 
     client: Client, 
     link: String
-) -> Result<String, BoxError> {
-    let downloaded = downloader::download(redis_links.clone(), client, link.clone())
-        .await;
-
-    if let Err(err) = downloaded {
-        link::update_status(redis_links.clone(), &link, LinkStatus::DownloadFailed)
-            .await?;
-        return Err(err)
+) -> Result<String, Error> {
+    match downloader::download(redis_links.clone(), client, link.clone()).await {
+        Err(err) => {
+            link::update_status(redis_links.clone(), &link, LinkStatus::DownloadFailed).await?;
+            return Err(err)
+        },
+        Ok(downloaded) => Ok(downloaded),
     }
-
-    Ok(downloaded.unwrap())
 }
 
 #[tracing::instrument(skip(redis_links, contents))]
@@ -35,25 +33,20 @@ pub async fn process_extract(
     redis_links: MultiplexedConnection, 
     contents: String,
     link: String
-) -> Result<Option<Value>, BoxError> {
-    let extracted = extractor::extract(&link, &contents)
-        .await;
+) -> Result<Option<Value>, Error> {
+    let extracted = extractor::extract(&link, &contents).await;
 
     if let Err(err) = extracted {
-        link::update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed)
-            .await?;
-        link::set_content_size(redis_links.clone(), &link, contents.len())
-            .await?;
+        link::update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed).await?;
+        link::set_content_size(redis_links.clone(), &link, contents.len()).await?;
         return Err(err);
     }
 
     let extracted = extracted.unwrap();
 
     if extracted.is_none() {
-        link::update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed)
-            .await?;
-        link::set_content_size(redis_links.clone(), &link, contents.len())
-            .await?;
+        link::update_status(redis_links.clone(), &link, LinkStatus::ExtractionFailed).await?;
+        link::set_content_size(redis_links.clone(), &link, contents.len()).await?;
         return Ok(None);
     }
 
@@ -66,23 +59,19 @@ pub async fn process_parse(
     redis_recipes: MultiplexedConnection, 
     schema: Value,
     link: String
-) -> Result<Option<Recipe>, BoxError> {
+) -> Result<Option<Recipe>, Error> {
 
-    let parsed = parser::parse(link.to_string(), schema)
-        .await;
+    let parsed = parser::parse(link.to_string(), schema).await;
 
     let Some(parsed) = parsed else {
         trace!("Failed to parse recipe from {}", link);
-        link::update_status(redis_links.clone(), &link, LinkStatus::ParsingFailed)
-            .await?;
+        link::update_status(redis_links.clone(), &link, LinkStatus::ParsingFailed).await?;
         return Ok(None);
     };
 
 
-    link::update_status(redis_links.clone(), &link, LinkStatus::Processed)
-        .await?;
-    recipe::add(redis_recipes, parsed.clone())
-        .await?;
+    link::update_status(redis_links.clone(), &link, LinkStatus::Processed).await?;
+    recipe::add(redis_recipes, parsed.clone()).await?;
 
     trace!("Parsed recipe from {}", link);
 
@@ -95,13 +84,12 @@ pub async fn process_follow(
     contents: String,
     recipe: Option<Recipe>,
     link: String
-) -> Result<(), BoxError> {
+) -> Result<(), Error> {
     let recipe_exists = recipe.is_some();
     let recipe_is_complete = recipe.as_ref().is_some_and(|recipe| recipe.is_complete());
 
     // Remaining follows
-    let remaining_follows = link::get_remaining_follows(redis_links.clone(), &link)
-        .await?;
+    let remaining_follows = link::get_remaining_follows(redis_links.clone(), &link).await?;
     if remaining_follows <= 0 && !recipe_is_complete {
         trace!("Terminated follow for {}", link);
         return Ok(())
@@ -129,8 +117,14 @@ pub async fn process_follow(
 
     let mut added_links = vec![];
     for new_link in &new_links {
-        let added = link::add(redis_links.clone(), new_link, Some(&link), new_priority, new_remaining_follows)
-            .await?;
+        let added = match link::add(redis_links.clone(), new_link, Some(&link), new_priority, new_remaining_follows).await {
+            Ok(ok) => ok,
+            // don't return if the link is missing a domain
+            Err(err) => match err.downcast_ref::<LinkMissingDomainError>() {
+                Some(_) => false,
+                None => return Err(err),
+            }
+        };
         if added {
             added_links.push(new_link) 
         }
@@ -152,8 +146,7 @@ pub async fn process(
     let _permit = semaphore.acquire().await.unwrap();
 
     // Download
-    let downloaded = process_download(redis_links.clone(), client, link.clone())
-        .await;
+    let downloaded = process_download(redis_links.clone(), client, link.clone()).await;
     if let Err(err) = downloaded {
         debug!("Error downloading {}: {} (source: {:?})", &link, err, err.source());
         return;
@@ -161,8 +154,7 @@ pub async fn process(
     let downloaded = downloaded.unwrap();
 
     // Extract
-    let extracted = process_extract(redis_links.clone(), downloaded.clone(), link.clone())
-        .await;
+    let extracted = process_extract(redis_links.clone(), downloaded.clone(), link.clone()).await;
     if let Err(err) = extracted  {
         warn!("Error extracting {}: {} (source: {:?})", &link, err, err.source());
         return;
@@ -173,8 +165,7 @@ pub async fn process(
     // (can't use map due to async closures being unstable)
     let parsed = match extracted {
         Some(extracted) => {
-            let parsed = process_parse(redis_links.clone(), redis_recipes, extracted, link.clone())
-                .await;
+            let parsed = process_parse(redis_links.clone(), redis_recipes, extracted, link.clone()).await;
             if let Err(err) = parsed  {
                 warn!("Error parsing {}: {} (source: {:?})", &link, err, err.source());
                 return;
@@ -185,8 +176,7 @@ pub async fn process(
     };
 
     // Follow
-    let followed = process_follow(redis_links.clone(), downloaded, parsed, link.clone())
-        .await;
+    let followed = process_follow(redis_links.clone(), downloaded, parsed, link.clone()).await;
     if let Err(err) = followed  {
         warn!("Error following {}: {} (source: {:?})", &link, err, err.source());
         return;

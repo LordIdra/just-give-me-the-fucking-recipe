@@ -1,10 +1,9 @@
 use std::slice::Iter;
 
+use anyhow::Error;
 use redis::{aio::MultiplexedConnection, AsyncCommands, ErrorKind, FromRedisValue, RedisError, RedisResult, Value};
 use serde::Serialize;
 use utoipa::ToSchema;
-
-use crate::BoxError;
 
 #[derive(Serialize, Debug, Clone, ToSchema)]
 pub struct Recipe {
@@ -216,14 +215,12 @@ fn key_recipe_instructions(id: u64) -> String {
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
-pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Result<bool, BoxError> {
+pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Result<bool, Error> {
     if exists(redis_recipes.clone(), &recipe).await? {
         return Ok(false);
     }
 
-    let id: u64 = redis_recipes.incr(key_next_id(), 1)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let id: u64 = redis_recipes.incr(key_next_id(), 1).await?;
 
     let mut pipe = redis::pipe();
 
@@ -289,40 +286,29 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
         }
     }
 
-    pipe.exec_async(&mut redis_recipes)
-        .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
+    pipe.exec_async(&mut redis_recipes).await?;
     
     Ok(true)
 }
 
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
-pub async fn recipe_count(mut redis_recipes: MultiplexedConnection) -> Result<usize, BoxError> {
-    let count: usize = redis_recipes.scard(key_recipes())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(count)
+pub async fn recipe_count(mut redis_recipes: MultiplexedConnection) -> Result<usize, Error> {
+    Ok(redis_recipes.scard(key_recipes()).await?)
 }
 
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
-async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Result<bool, BoxError> {
-    let recipes_with_titles: Vec<usize> = redis_recipes.smembers(key_title_recipes(&recipe.title))
-        .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
-
-    let recipes_with_description: Vec<usize> = redis_recipes.smembers(key_description_recipes(&recipe.description))
-        .await
-        .map_err(|err| dbg!(Box::new(err) as BoxError))?;
+async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Result<bool, Error> {
+    let recipes_with_titles: Vec<usize> = redis_recipes.smembers(key_title_recipes(&recipe.title)).await?;
+    let recipes_with_description: Vec<usize> = redis_recipes.smembers(key_description_recipes(&recipe.description)).await?;
 
     Ok(recipes_with_titles.iter().any(|x| recipes_with_description.contains(x)))
 }
 
 #[tracing::instrument(skip(redis_recipes))]
 #[must_use]
-pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Recipe, BoxError> {
+pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Recipe, Error> {
     let mut pipe = redis::pipe();
 
     pipe.get(key_recipe_link(id));

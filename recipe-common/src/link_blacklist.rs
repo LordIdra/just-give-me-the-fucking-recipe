@@ -1,6 +1,5 @@
+use anyhow::Error;
 use redis::{aio::MultiplexedConnection, AsyncCommands};
-
-use crate::BoxError;
 
 fn key_blacklist() -> String {
     "blacklist".to_string()
@@ -10,34 +9,26 @@ fn key_blacklist() -> String {
 /// Returns false if already existed
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn add(mut pool: MultiplexedConnection, word: &str) -> Result<bool, BoxError> {
+pub async fn add(mut pool: MultiplexedConnection, word: &str) -> Result<bool, Error> {
     if exists(pool.clone(), word).await? {
         return Ok(false);
     }
 
-    let _: () = pool.sadd(key_blacklist(), word)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let _: () = pool.sadd(key_blacklist(), word).await?;
    
     Ok(true)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, BoxError> {
-    let exists: bool = pool.sismember(key_blacklist(), word)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(exists)
+async fn exists(mut pool: MultiplexedConnection, word: &str) -> Result<bool, Error> {
+    Ok(pool.sismember(key_blacklist(), word).await?)
 }
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn is_allowed(mut pool: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
-    let blacklist: Vec<String> = pool.smembers(key_blacklist())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+pub async fn is_allowed(mut pool: MultiplexedConnection, link: &str) -> Result<bool, Error> {
+    let blacklist: Vec<String> = pool.smembers(key_blacklist()).await?;
 
     for word in blacklist {
         if link.contains(&word) {

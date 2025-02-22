@@ -1,7 +1,8 @@
 use std::time::Duration;
 
+use anyhow::Error;
 use log::{info, warn};
-use recipe_common::{link::{links_with_status, total_content_size, LinkStatus}, recipe::recipe_count, BoxError};
+use recipe_common::{link::{links_with_status, total_content_size, LinkStatus}, recipe::recipe_count};
 use redis::aio::MultiplexedConnection;
 use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
@@ -12,7 +13,7 @@ async fn update(
     redis_links: MultiplexedConnection, 
     redis_recipes: MultiplexedConnection, 
     mysql: Pool<MySql>,
-) -> Result<(), BoxError> {
+) -> Result<(), Error> {
     let timestamp = chrono::offset::Utc::now();
 
     query("INSERT INTO link_statistic (
@@ -27,8 +28,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
         .bind(links_with_status(redis_links.clone(), LinkStatus::Processed).await? as i64)
         .bind(total_content_size(redis_links.clone()).await? as u64)
         .execute(&mysql)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .await?;
 
     query("INSERT INTO recipe_statistic (
 timestamp, recipe_count
@@ -36,8 +36,7 @@ timestamp, recipe_count
         .bind(timestamp)
         .bind(recipe_count(redis_recipes.clone()).await? as i64)
         .execute(&mysql)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+        .await?;
 
     info!("Statistics updated");
 

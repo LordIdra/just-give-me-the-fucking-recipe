@@ -1,11 +1,12 @@
-use std::{error::Error, fmt};
+use std::fmt;
 
+use anyhow::Error;
 use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 use url::Url;
 
-use crate::{link_blacklist, BoxError};
+use crate::link_blacklist;
 
 #[derive(Debug)]
 pub struct ProcessingLinkNotFoundError;
@@ -16,7 +17,7 @@ impl fmt::Display for ProcessingLinkNotFoundError {
     }
 }
 
-impl Error for ProcessingLinkNotFoundError {}
+impl std::error::Error for ProcessingLinkNotFoundError {}
 
 #[derive(Debug)]
 pub struct LinkMissingDomainError {
@@ -29,7 +30,7 @@ impl fmt::Display for LinkMissingDomainError {
     }
 }
 
-impl Error for LinkMissingDomainError  {}
+impl std::error::Error for LinkMissingDomainError  {}
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum LinkStatus {
@@ -108,10 +109,8 @@ fn key_link_to_content_size() -> String {
 
 #[tracing::instrument(skip(pool))]
 #[must_use]
-pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), BoxError> {
-    let processing: Vec<String> = pool.zrange(key_status_to_links(LinkStatus::Processing), 0, -1)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), Error> {
+    let processing: Vec<String> = pool.zrange(key_status_to_links(LinkStatus::Processing), 0, -1).await?;
     for link in processing {
         update_status(pool.clone(), &link, LinkStatus::Waiting).await?;
     }
@@ -129,15 +128,14 @@ pub async fn add(
     parent: Option<&str>,
     priority: f32,
     remaining_follows: i32,
-) -> Result<bool, BoxError> {
+) -> Result<bool, Error> {
     if !link_blacklist::is_allowed(pool.clone(), link).await? || exists(pool.clone(), link).await? {
         return Ok(false);
     }
 
-    let url = Url::parse(link)
-        .map_err(|err| Box::new(err) as BoxError)?;
+    let url = Url::parse(link)?;
     let Some(domain) = url.domain().map(|domain| domain.to_owned()) else {
-        return Err(Box::new(LinkMissingDomainError { link: link.to_owned() }))
+        return Err(LinkMissingDomainError { link: link.to_owned() }.into())
     };
 
     let mut pipe = redis::pipe();
@@ -152,18 +150,10 @@ pub async fn add(
         pipe.hset(key_link_to_parent(), link, parent);
     }
 
-    let _: () = pipe.exec_async(&mut pool)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    let is_domain_processing: bool = pool.sismember(key_processing_domains(), &domain)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
+    pipe.exec_async(&mut pool).await?;
+    let is_domain_processing: bool = pool.sismember(key_processing_domains(), &domain).await?;
     if !is_domain_processing {
-        let _: () = pool.zadd(key_domain_to_waiting_links(&domain), link, priority)
-            .await
-            .map_err(|err| Box::new(err) as BoxError)?;
+        let _: () = pool.zadd(key_domain_to_waiting_links(&domain), link, priority).await?;
     }
 
     Ok(true)
@@ -171,104 +161,67 @@ pub async fn add(
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_status(mut redis_links: MultiplexedConnection, link: &str) -> Result<LinkStatus, BoxError> {
-    let status: String = redis_links.hget(key_link_to_status(), link)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(LinkStatus::from_string(&status).unwrap())
+pub async fn get_status(mut redis_links: MultiplexedConnection, link: &str) -> Result<LinkStatus, Error> {
+    Ok(LinkStatus::from_string(&redis_links.hget::<_, _, String>(key_link_to_status(), link).await?).unwrap())
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_priority(mut redis_links: MultiplexedConnection, link: &str) -> Result<f32, BoxError> {
-    let priority: f32 = redis_links.hget(key_link_to_priority(), link)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(priority)
+pub async fn get_priority(mut redis_links: MultiplexedConnection, link: &str) -> Result<f32, Error> {
+    Ok(redis_links.hget(key_link_to_priority(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_domain(mut redis_links: MultiplexedConnection, link: &str) -> Result<String, BoxError> {
-    let domain: String = redis_links.hget(key_link_to_domain(), link)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(domain)
+pub async fn get_domain(mut redis_links: MultiplexedConnection, link: &str) -> Result<String, Error> {
+    Ok(redis_links.hget(key_link_to_domain(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn get_remaining_follows(mut redis_links: MultiplexedConnection, link: &str) -> Result<i32, BoxError> {
-    let remaining_follows: i32 = redis_links.hget(key_link_to_remaining_follows(), link)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(remaining_follows)
+pub async fn get_remaining_follows(mut redis_links: MultiplexedConnection, link: &str) -> Result<i32, Error> {
+    Ok(redis_links.hget(key_link_to_remaining_follows(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn set_content_size(mut redis_links: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), BoxError> {
-    let _: () = redis_links.hset(key_link_to_content_size(), link, content_size)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(())
+pub async fn set_content_size(mut redis_links: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), Error> {
+    Ok(redis_links.hset(key_link_to_content_size(), link, content_size).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn links_with_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<usize, BoxError> {
-    let count: usize = redis_links.zcard(key_status_to_links(status))
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(count)
+pub async fn links_with_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<usize, Error> {
+    Ok(redis_links.zcard(key_status_to_links(status)).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn total_content_size(mut redis_links: MultiplexedConnection) -> Result<u64, BoxError> {
-    let sizes: Vec<String> = redis_links.hvals(key_link_to_content_size())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
+pub async fn total_content_size(mut redis_links: MultiplexedConnection) -> Result<u64, Error> {
+    let sizes: Vec<String> = redis_links.hvals(key_link_to_content_size()).await?;
     Ok(sizes.iter().filter_map(|v| v.parse::<u64>().ok()).sum())
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn is_domain_waiting(mut redis_links: MultiplexedConnection, domain: &str) -> Result<bool, BoxError> {
-    let exists: bool = redis_links.exists(key_domain_to_waiting_links(domain))
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-    Ok(exists)
+pub async fn is_domain_waiting(mut redis_links: MultiplexedConnection, domain: &str) -> Result<bool, Error> {
+    Ok(redis_links.exists(key_domain_to_waiting_links(domain)).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result<usize, BoxError> {
-    let processing: usize = redis_links.scard(key_processing_domains())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-    let waiting: usize = redis_links.scard(key_waiting_domains())
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result<usize, Error> {
+    let processing: usize = redis_links.scard(key_processing_domains()).await?;
+    let waiting: usize = redis_links.scard(key_waiting_domains()).await?;
     Ok(processing + waiting)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), BoxError> {
-    let previous_status = get_status(redis_links.clone(), link)
-        .await?;
-    let priority = get_priority(redis_links.clone(), link)
-        .await?;
-    let domain = get_domain(redis_links.clone(), link)
-        .await?;
+pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), Error> {
+    let previous_status = get_status(redis_links.clone(), link).await?;
+    let priority = get_priority(redis_links.clone(), link).await?;
+    let domain = get_domain(redis_links.clone(), link).await?;
 
     let mut pipe = redis::pipe();
     pipe.zrem(key_status_to_links(previous_status), link);
@@ -283,9 +236,7 @@ pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, s
         pipe.zrem(key_domain_to_waiting_links(&domain), link);
     }
 
-    pipe.exec_async(&mut redis_links)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.exec_async(&mut redis_links).await?;
 
     // Results of previous computation are required here so use a new pipe
     let mut pipe = redis::pipe();
@@ -301,29 +252,21 @@ pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, s
         }
     }
 
-    pipe.exec_async(&mut redis_links)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+    pipe.exec_async(&mut redis_links).await?;
 
     Ok(())
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-async fn exists(mut redis_links: MultiplexedConnection, link: &str) -> Result<bool, BoxError> {
-    let exists: bool = redis_links.hexists(key_link_to_status(), link)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
-
-    Ok(exists)
+async fn exists(mut redis_links: MultiplexedConnection, link: &str) -> Result<bool, Error> {
+    Ok(redis_links.hexists(key_link_to_status(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
-pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize) -> Result<Vec<String>, BoxError> {
-    let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_links)
-        .await
-        .map_err(|err| Box::new(err) as BoxError)?;
+pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize) -> Result<Vec<String>, Error> {
+    let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_links).await?;
 
     let mut futures = JoinSet::new();
     for domain in next_domains {
@@ -335,8 +278,7 @@ pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize
     let next_links: Vec<String> = futures.join_all()
         .await
         .into_iter()
-        .collect::<Result<Vec<Vec<String>>, _>>()
-        .map_err(|err| Box::new(err) as BoxError)?
+        .collect::<Result<Vec<Vec<String>>, _>>()?
         .into_iter()
         .filter_map(|entry| entry.first().cloned())
         .collect();
