@@ -1,7 +1,7 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use recipe_common::link::{self};
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 
 use crate::AppState;
 
@@ -13,7 +13,7 @@ fn remaining_follows_default() -> i32 {
     2
 }
 
-#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SubmitLinkRequest {
     #[schema(example = "https://www.indianhealthyrecipes.com/cauliflower-curry-recipe/")]
     link: String,
@@ -40,7 +40,6 @@ struct SubmitLinkErrorResponse {
     post,
     path = "/submit_link",
     description = "Add a link to the waiting queue, with an optional priority and optional remaining follows (how deep we should follow any links on the page)",
-    params(SubmitLinkRequest),
     responses(
         (status = OK, body = SubmitLinkSuccessResponse),
         (status = BAD_REQUEST, body = SubmitLinkErrorResponse)
