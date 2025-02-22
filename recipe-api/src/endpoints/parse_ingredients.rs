@@ -1,6 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use ingredient::Ingredient;
-use recipe_common::recipe::{self, Recipe};
+use recipe_common::recipe;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -34,7 +33,7 @@ struct ParseIngredientErrorResponse {
     ),
 )]
 #[tracing::instrument(skip(state))]
-pub async fn get_recipe(
+pub async fn parse_ingredients(
     State(state): State<AppState>, 
     Json(request): Json<ParseIngredientRequest>
 ) -> impl IntoResponse {
