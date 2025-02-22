@@ -43,7 +43,7 @@ struct Args {
 async fn main() {
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_line_number(true);
-        //.with_filter(EnvFilter::new("recipe-finder=trace,recipe-common=trace"));
+        .with_filter(EnvFilter::new("recipe_finder=trace,recipe_common=trace"));
 
     tracing_subscriber::registry()
         .with(fmt_layer)

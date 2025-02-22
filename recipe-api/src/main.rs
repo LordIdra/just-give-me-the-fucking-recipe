@@ -33,7 +33,7 @@ pub struct AppState {
 async fn main() {
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_line_number(true)
-        .with_filter(EnvFilter::new("recipe-api=trace,recipe-common=trace"));
+        .with_filter(EnvFilter::new("recipe_api=trace,recipe_common=trace"));
 
     tracing_subscriber::registry()
         .with(fmt_layer)
