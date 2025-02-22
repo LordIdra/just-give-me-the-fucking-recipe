@@ -15,13 +15,13 @@ fn remaining_follows_default() -> i32 {
 
 #[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct SubmitLinkRequest {
-    #[param(example = "https://www.indianhealthyrecipes.com/cauliflower-curry-recipe/")]
+    #[schema(example = "https://www.indianhealthyrecipes.com/cauliflower-curry-recipe/")]
     link: String,
     #[serde(default = "priority_default")]
-    #[param(default = 0.0)]
+    #[schema(default = 0.0)]
     priority: f32,
     #[serde(default = "remaining_follows_default")]
-    #[param(default = 2)]
+    #[schema(default = 2)]
     remaining_follows: i32,
 }
 
@@ -32,6 +32,7 @@ struct SubmitLinkSuccessResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 struct SubmitLinkErrorResponse {
+    #[schema(example = "some error")]
     err: String,
 }
 
