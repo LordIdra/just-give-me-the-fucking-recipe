@@ -25,7 +25,7 @@ struct ParseIngredientErrorResponse {
 
 #[utoipa::path(
     post,
-    path = "/submit_link",
+    path = "/parse_ingredients",
     description = "Parse a link's ingredient list. The link must have already been indexed.",
     responses(
         (status = OK, body = ParseIngredientSuccessResponse),

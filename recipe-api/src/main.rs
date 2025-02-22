@@ -62,8 +62,7 @@ async fn main() {
     };
 
     let api_router = OpenApiRouter::new()
-        .routes(routes!(submit_link))
-        .routes(routes!(parse_ingredients))
+        .routes(routes!(submit_link, parse_ingredients))
         .with_state(state);
 
 
