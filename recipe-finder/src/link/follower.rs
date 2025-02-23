@@ -27,19 +27,20 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
         .map(|captures| captures.get(0).unwrap().as_str())
         .filter_map(|element| HREF_REGEX.captures(element))
             .map(|captures| captures.get(1).unwrap().as_str())
-        .inspect(|v| trace!("bruh {}", v))
 
         // fix relative links (eg '/category/stupid_recipes' -> bbc.co.uk/category/stupid_recipes)
         .map(|v| if v.chars().next().is_some_and(|v| v == '/') { 
-                trace!("bro {}", domain.to_string() + v);
                 domain.clone() + v 
             } else { 
                 v.to_string() 
             })
+        .inspect(|v| trace!("1 {}", v))
         .filter(|new_link| Url::parse(new_link).is_ok())
+        .inspect(|v| trace!("2 {}", v))
 
         // eg, bruh.com/some-recipe might have links to bruh.com/some-recipe/comments#36
         .filter(|new_link| !new_link.starts_with(&link))
+        .inspect(|v| trace!("3 {}", v))
 
         // hardcoded fix. often, recipes have www.domain.com/your_shitty_recipe/wprm_print pages
         // these pages have shit schemas. but the original pages are generally fine

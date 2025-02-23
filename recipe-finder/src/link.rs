@@ -95,8 +95,6 @@ pub async fn process_follow(
         return Ok(())
     }
 
-    
-
     // Priority
     let new_priority = if recipe_is_complete {
         0.0
