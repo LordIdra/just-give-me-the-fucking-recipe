@@ -18,6 +18,7 @@ static HREF_REGEX: LazyLock<Regex> = LazyLock::new(||
 #[tracing::instrument(skip(contents))]
 pub async fn follow(contents: String, link: String) -> Vec<String> {
     LINK_ELEMENT_REGEX.captures_iter(&contents)
+        .inspect(|v| trace!("{}", v))
         .map(|captures| captures.get(0).unwrap().as_str())
         .filter_map(|element| HREF_REGEX.captures(element))
             .map(|captures| captures.get(1).unwrap().as_str())
