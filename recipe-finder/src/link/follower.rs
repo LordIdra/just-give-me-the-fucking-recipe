@@ -25,12 +25,13 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
 
     LINK_ELEMENT_REGEX.captures_iter(&contents)
         .map(|captures| captures.get(0).unwrap().as_str())
-        .inspect(|v| trace!("{}", v))
         .filter_map(|element| HREF_REGEX.captures(element))
             .map(|captures| captures.get(1).unwrap().as_str())
+        .inspect(|v| trace!("bruh {}", v))
 
         // fix relative links (eg '/category/stupid_recipes' -> bbc.co.uk/category/stupid_recipes)
         .map(|v| if v.chars().next().is_some_and(|v| v == '/') { 
+                trace!("bro {}", domain.to_string() + v);
                 domain.to_string() + v 
             } else { 
                 v.to_string() 
