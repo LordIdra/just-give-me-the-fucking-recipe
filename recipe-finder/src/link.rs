@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Error;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use recipe_common::{link::{self, LinkMissingDomainError, LinkStatus}, recipe::{self, Recipe}};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
@@ -118,7 +118,10 @@ pub async fn process_follow(
             Ok(ok) => ok,
             // don't return if the link is missing a domain
             Err(err) => match err.downcast_ref::<LinkMissingDomainError>() {
-                Some(_) => false,
+                Some(_) => {
+                    error!("bruh");
+                    false
+                },
                 None => return Err(err),
             }
         };
