@@ -7,14 +7,31 @@ use utoipa::ToSchema;
 use crate::AppState;
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct ParseIngredientRequest {
+pub struct ParseIngredientsRequest {
     #[schema(example = 54)]
     id: u64,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct ParseIngredientSuccessResponse {
-    ingredients: Vec<String>,
+struct ParseIngredientsAmount {
+    raw: String,
+    value: String,
+    upper_value: Option<String>,
+    unit: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ParseIngredientsIngredient {
+    original: String,
+    raw: String,
+    name: String,
+    amounts: Vec<ParseIngredientsAmount>,
+    modifier: Option<String>
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ParseIngredientsSuccessResponse {
+    ingredients: Vec<ParseIngredientsIngredient>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -28,14 +45,14 @@ struct ParseIngredientErrorResponse {
     path = "/parse_ingredients",
     description = "Parse a recipe's ingredient list.",
     responses(
-        (status = OK, body = ParseIngredientSuccessResponse),
+        (status = OK, body = ParseIngredientsSuccessResponse),
         (status = BAD_REQUEST, body = ParseIngredientErrorResponse)
     ),
 )]
 #[tracing::instrument(skip(state))]
 pub async fn parse_ingredients(
     State(state): State<AppState>, 
-    Json(request): Json<ParseIngredientRequest>
+    Json(request): Json<ParseIngredientsRequest>
 ) -> impl IntoResponse {
     match recipe::get_recipe(state.redis_recipes, request.id).await {
         Err(err) => (
@@ -44,23 +61,44 @@ pub async fn parse_ingredients(
         ).into_response(),
 
         Ok(recipe) => {
-            let ingredients: Result<Vec<Ingredient>, _> = recipe.ingredients.iter()
+            let parsed_ingredients: Result<Vec<Ingredient>, _> = recipe.ingredients.iter()
                 .map(|v| Ingredient::try_from(v.as_str()))
                 .collect();
 
-            match ingredients {
+            match parsed_ingredients {
                 Err(err) => (
                     StatusCode::BAD_REQUEST, 
                     Json(ParseIngredientErrorResponse { err: err.to_string() }),
                 ).into_response(),
-                Ok(ingredients) => {
-                    let ingredients = ingredients.into_iter()
-                        .map(|v| v.to_string())
-                        .collect();
+
+                Ok(parsed_ingredients) => {
+
+                    let mut formatted_ingredients = vec![];
+                    for (parsed_ingredient, original_ingredient) in parsed_ingredients.iter().zip(recipe.ingredients) {
+
+                        let mut formatted_amounts = vec![];
+                        for amount in &parsed_ingredient.amounts {
+                            let (value, upper_value) = amount.values();
+                            formatted_amounts.push(ParseIngredientsAmount { 
+                                raw: amount.to_string(),
+                                value: value.to_string(),
+                                upper_value: upper_value.map(|v| v.to_string()),
+                                unit: amount.unit().to_str(),
+                            });
+                        }
+
+                        formatted_ingredients.push(ParseIngredientsIngredient {
+                            original: original_ingredient,
+                            raw: parsed_ingredient.to_string(),
+                            name: parsed_ingredient.name.clone(),
+                            amounts: formatted_amounts,
+                            modifier: parsed_ingredient.modifier.clone(),
+                        });
+                    }
 
                     (
                         StatusCode::OK,
-                        Json(ParseIngredientSuccessResponse { ingredients }),
+                        Json(ParseIngredientsSuccessResponse { ingredients: formatted_ingredients }),
                     ).into_response()
                 }
             }

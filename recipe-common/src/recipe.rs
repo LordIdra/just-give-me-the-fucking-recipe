@@ -337,8 +337,7 @@ pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Re
     pipe.get(key_recipe_sugar(id));
 
     let recipe = pipe.query_async(&mut redis_recipes)
-        .await
-        .unwrap();
+        .await?;
 
     Ok(recipe)
 }
