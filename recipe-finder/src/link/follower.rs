@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use log::trace;
 use regex::{Regex, RegexBuilder};
 use url::Url;
 
