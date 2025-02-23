@@ -20,7 +20,7 @@ static HREF_REGEX: LazyLock<Regex> = LazyLock::new(||
 pub async fn follow(contents: String, link: String) -> Vec<String> {
     let url = Url::parse(&link)
         .expect("How did you screw this up");
-    let domain = url.domain()
+    let domain = "https://".to_string() + url.domain()
         .expect("How did you screw this up");
 
     LINK_ELEMENT_REGEX.captures_iter(&contents)
@@ -32,7 +32,7 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
         // fix relative links (eg '/category/stupid_recipes' -> bbc.co.uk/category/stupid_recipes)
         .map(|v| if v.chars().next().is_some_and(|v| v == '/') { 
                 trace!("bro {}", domain.to_string() + v);
-                domain.to_string() + v 
+                domain.clone() + v 
             } else { 
                 v.to_string() 
             })
