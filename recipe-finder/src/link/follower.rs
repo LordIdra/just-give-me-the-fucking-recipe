@@ -5,7 +5,7 @@ use regex::{Regex, RegexBuilder};
 use url::Url;
 
 static LINK_ELEMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| 
-    RegexBuilder::new(r#"<a.{0,2000}>"#)
+    RegexBuilder::new(r#"<a.{0,2000}?>"#)
         .build()
         .unwrap()
 );
