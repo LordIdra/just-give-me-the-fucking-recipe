@@ -95,13 +95,7 @@ pub async fn process_follow(
         return Ok(())
     }
 
-    let new_remaining_follows = if recipe_is_complete {
-        2
-    } else if recipe_exists {
-        1
-    } else {
-        remaining_follows - 1
-    };
+    
 
     // Priority
     let new_priority = if recipe_is_complete {
@@ -117,6 +111,11 @@ pub async fn process_follow(
 
     let mut added_links = vec![];
     for new_link in &new_links {
+        let new_remaining_follows = if recipe_exists {
+            1
+        } else {
+            remaining_follows - 1
+        };
         let added = match link::add(redis_links.clone(), new_link, Some(&link), new_priority, new_remaining_follows).await {
             Ok(ok) => ok,
             // don't return if the link is missing a domain
