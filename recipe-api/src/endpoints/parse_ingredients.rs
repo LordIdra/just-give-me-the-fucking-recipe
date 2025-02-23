@@ -16,6 +16,7 @@ pub struct ParseIngredientsRequest {
 struct ParseIngredientsAmount {
     raw: String,
     value: String,
+    #[schema(nullable)]
     upper_value: Option<String>,
     unit: String,
 }
@@ -26,6 +27,7 @@ struct ParseIngredientsIngredient {
     raw: String,
     name: String,
     amounts: Vec<ParseIngredientsAmount>,
+    #[schema(nullable)]
     modifier: Option<String>
 }
 
