@@ -23,6 +23,8 @@ pub async fn follow(contents: String, link: String) -> Vec<String> {
         .inspect(|v| trace!("{}", v))
         .filter_map(|element| HREF_REGEX.captures(element))
             .map(|captures| captures.get(1).unwrap().as_str())
+        // fix relative links (eg '/category/stupid_recipes' -> bbc.co.uk/category/stupid_recipes)
+        .map(|v| if v.chars().next().is_some_and(|v| v == '/') { link.clone() + v } else { v.to_string() })
         .filter(|new_link| Url::parse(new_link).is_ok())
         // eg, bruh.com/some-recipe might have links to bruh.com/some-recipe/comments#36
         .filter(|new_link| !new_link.starts_with(&link))
