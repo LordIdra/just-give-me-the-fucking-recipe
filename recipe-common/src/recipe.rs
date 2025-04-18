@@ -351,7 +351,7 @@ pub async fn extract_terms(recipe: &Recipe) -> Vec<String> {
     terms.append(&mut split_by_space(&recipe.title));
     terms.append(&mut split_by_space(&recipe.description));
     for keyword in &recipe.keywords {
-        terms.push(keyword.to_string());
+        terms.append(&mut split_by_space(keyword));
     }
     for ingredient in &recipe.ingredients {
         terms.append(&mut split_by_space(ingredient));
