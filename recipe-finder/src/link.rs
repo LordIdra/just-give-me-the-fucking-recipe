@@ -85,7 +85,7 @@ pub async fn process_follow(
     recipe: Option<Recipe>,
     link: String
 ) -> Result<(), Error> {
-    let recipe_exists = recipe.is_some();
+    let recipe_exists = recipe.as_ref().is_some_and(|recipe| !recipe.ingredients.is_empty());
     let recipe_is_complete = recipe.as_ref().is_some_and(|recipe| recipe.is_complete());
 
     // Remaining follows
