@@ -342,3 +342,18 @@ pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Re
     Ok(recipe)
 }
 
+pub async fn extract_terms(recipe: &Recipe) -> Vec<String> {
+    let mut terms = vec![];
+    terms.append(&mut recipe.title.split(' ').map(|v| v.to_string()).collect());
+    terms.append(&mut recipe.description.split(' ').map(|v| v.to_string()).collect());
+    for keyword in &recipe.keywords {
+        terms.push(keyword.to_string());
+    }
+    for ingredient in &recipe.ingredients {
+        terms.append(&mut ingredient.split(' ').map(|v| v.to_string()).collect());
+    }
+    for instruction in &recipe.instructions {
+        terms.append(&mut instruction.split(' ').map(|v| v.to_string()).collect());
+    }
+    terms
+}

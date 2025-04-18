@@ -16,7 +16,6 @@ pub struct ParseIngredientsRequest {
 struct ParseIngredientsAmount {
     raw: String,
     value: String,
-    #[schema(nullable)]
     upper_value: Option<String>,
     unit: String,
 }
@@ -27,7 +26,6 @@ struct ParseIngredientsIngredient {
     raw: String,
     name: String,
     amounts: Vec<ParseIngredientsAmount>,
-    #[schema(nullable)]
     modifier: Option<String>
 }
 
@@ -80,6 +78,7 @@ pub async fn parse_ingredients(
 
                         let mut formatted_amounts = vec![];
                         for amount in &parsed_ingredient.amounts {
+                            let amount = amount.normalize();
                             let (value, upper_value) = amount.values();
                             formatted_amounts.push(ParseIngredientsAmount { 
                                 raw: amount.to_string(),

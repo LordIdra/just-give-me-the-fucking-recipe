@@ -1,4 +1,5 @@
 use clap::Parser;
+use endpoints::extract_terms::extract_terms;
 use endpoints::get_recipe::get_recipe;
 use endpoints::{parse_ingredients::parse_ingredients, submit_link::submit_link};
 use log::info;
@@ -8,6 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_redoc::{Redoc, Servable};
+use crate::endpoints::extract_terms::__path_extract_terms;
 use crate::endpoints::get_recipe::__path_get_recipe;
 use crate::endpoints::parse_ingredients::__path_parse_ingredients;
 use crate::endpoints::submit_link::__path_submit_link;
@@ -64,6 +66,7 @@ async fn main() {
     };
 
     let api_router = OpenApiRouter::new()
+        .routes(routes!(extract_terms))
         .routes(routes!(get_recipe))
         .routes(routes!(parse_ingredients))
         .routes(routes!(submit_link))
