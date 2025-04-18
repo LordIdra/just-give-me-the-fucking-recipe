@@ -1,4 +1,4 @@
-use std::slice::Iter;
+use std::{collections::HashSet, slice::Iter};
 
 use anyhow::Error;
 use redis::{aio::MultiplexedConnection, AsyncCommands, ErrorKind, FromRedisValue, RedisError, RedisResult, Value};
@@ -105,6 +105,10 @@ fn key_next_id() -> String {
 
 fn key_recipes() -> String {
     "recipe:recipes".to_string()
+}
+
+fn key_term_to_recipes(term: &str) -> String {
+    format!("recipe:recipes_by_term:{}", term)
 }
 
 fn key_recipe_link(id: u64) -> String {
@@ -226,30 +230,30 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
 
     pipe.sadd(key_recipes(), id);
 
-    pipe.set(key_recipe_link(id), recipe.link);
+    pipe.set(key_recipe_link(id), &recipe.link);
 
     pipe.sadd(key_title_recipes(&recipe.title), id);
-    pipe.set(key_recipe_title(id), recipe.title);
+    pipe.set(key_recipe_title(id), &recipe.title);
 
     pipe.sadd(key_description_recipes(&recipe.description), id);
-    pipe.set(key_recipe_description(id), recipe.description);
+    pipe.set(key_recipe_description(id), &recipe.description);
 
-    recipe.date.map(|v| pipe.set(key_recipe_date(id), v.to_string()));
-    recipe.rating.map(|v| pipe.set(key_recipe_rating(id), v));
-    recipe.rating_count.map(|v| pipe.set(key_recipe_rating_count(id), v));
-    recipe.prep_time_seconds.map(|v| pipe.set(key_recipe_prep_time_seconds(id), v));
-    recipe.cook_time_seconds.map(|v| pipe.set(key_recipe_cook_time_seconds(id), v));
-    recipe.total_time_seconds.map(|v| pipe.set(key_recipe_total_time_seconds(id), v));
-    recipe.servings.map(|v| pipe.set(key_recipe_servings(id), v));
-    recipe.calories.map(|v| pipe.set(key_recipe_calories(id), v));
-    recipe.carbohydrates.map(|v| pipe.set(key_recipe_carbohydrates(id), v));
-    recipe.cholesterol.map(|v| pipe.set(key_recipe_cholesterol(id), v));
-    recipe.fat.map(|v| pipe.set(key_recipe_fat(id), v));
-    recipe.fiber.map(|v| pipe.set(key_recipe_fiber(id), v));
-    recipe.protein.map(|v| pipe.set(key_recipe_protein(id), v));
-    recipe.saturated_fat.map(|v| pipe.set(key_recipe_saturated_fat(id), v));
-    recipe.sodium.map(|v| pipe.set(key_recipe_sodium(id), v));
-    recipe.sugar.map(|v| pipe.set(key_recipe_sugar(id), v));
+    recipe.date.as_ref().map(|v| pipe.set(key_recipe_date(id), v.to_string()));
+    recipe.rating.as_ref().map(|v| pipe.set(key_recipe_rating(id), v));
+    recipe.rating_count.as_ref().map(|v| pipe.set(key_recipe_rating_count(id), v));
+    recipe.prep_time_seconds.as_ref().map(|v| pipe.set(key_recipe_prep_time_seconds(id), v));
+    recipe.cook_time_seconds.as_ref().map(|v| pipe.set(key_recipe_cook_time_seconds(id), v));
+    recipe.total_time_seconds.as_ref().map(|v| pipe.set(key_recipe_total_time_seconds(id), v));
+    recipe.servings.as_ref().map(|v| pipe.set(key_recipe_servings(id), v));
+    recipe.calories.as_ref().map(|v| pipe.set(key_recipe_calories(id), v));
+    recipe.carbohydrates.as_ref().map(|v| pipe.set(key_recipe_carbohydrates(id), v));
+    recipe.cholesterol.as_ref().map(|v| pipe.set(key_recipe_cholesterol(id), v));
+    recipe.fat.as_ref().map(|v| pipe.set(key_recipe_fat(id), v));
+    recipe.fiber.as_ref().map(|v| pipe.set(key_recipe_fiber(id), v));
+    recipe.protein.as_ref().map(|v| pipe.set(key_recipe_protein(id), v));
+    recipe.saturated_fat.as_ref().map(|v| pipe.set(key_recipe_saturated_fat(id), v));
+    recipe.sodium.as_ref().map(|v| pipe.set(key_recipe_sodium(id), v));
+    recipe.sugar.as_ref().map(|v| pipe.set(key_recipe_sugar(id), v));
 
     if !recipe.keywords.is_empty() {
         pipe.cmd("lpush").arg(key_recipe_keywords(id));
@@ -284,6 +288,10 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
         for instruction in recipe.instructions.iter().rev() {
             pipe.arg(instruction);
         }
+    }
+    
+    for term in extract_terms(&recipe) {
+        pipe.sadd(key_term_to_recipes(&term), id);
     }
 
     pipe.exec_async(&mut redis_recipes).await?;
@@ -346,7 +354,7 @@ fn split_by_space(string: &str) -> Vec<String> {
     string.split(' ').map(|v| v.to_string()).collect()
 }
 
-pub async fn extract_terms(recipe: &Recipe) -> Vec<String> {
+pub fn extract_terms(recipe: &Recipe) -> Vec<String> {
     let mut terms = vec![];
     terms.append(&mut split_by_space(&recipe.title));
     terms.append(&mut split_by_space(&recipe.description));
@@ -360,4 +368,8 @@ pub async fn extract_terms(recipe: &Recipe) -> Vec<String> {
         terms.append(&mut split_by_space(instruction));
     }
     terms
+}
+
+pub async fn get_recipes_by_term(mut redis_recipes: MultiplexedConnection, term: &str) -> HashSet<usize> {
+    redis_recipes.smembers(key_term_to_recipes(term)).await.unwrap_or(HashSet::new())
 }

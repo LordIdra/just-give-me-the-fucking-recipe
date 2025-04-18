@@ -173,6 +173,12 @@ pub async fn get_priority(mut redis_links: MultiplexedConnection, link: &str) ->
 
 #[tracing::instrument(skip(redis_links))]
 #[must_use]
+pub async fn get_parent(mut redis_links: MultiplexedConnection, link: &str) -> Result<Option<String>, Error> {
+    Ok(redis_links.hget(key_link_to_parent(), link).await?)
+}
+
+#[tracing::instrument(skip(redis_links))]
+#[must_use]
 pub async fn get_domain(mut redis_links: MultiplexedConnection, link: &str) -> Result<String, Error> {
     Ok(redis_links.hget(key_link_to_domain(), link).await?)
 }
@@ -214,6 +220,12 @@ pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result
     let processing: usize = redis_links.scard(key_processing_domains()).await?;
     let waiting: usize = redis_links.scard(key_waiting_domains()).await?;
     Ok(processing + waiting)
+}
+
+#[tracing::instrument(skip(redis_links))]
+#[must_use]
+pub async fn get_links_by_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<Vec<String>, Error> {
+    Ok(redis::cmd("zrange").arg(key_status_to_links(status)).arg("0").arg("-1").query_async(&mut redis_links).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
@@ -297,3 +309,4 @@ pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize
 
     Ok(next_links)
 }
+
