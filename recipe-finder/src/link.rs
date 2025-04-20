@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Error;
 use log::{debug, info, trace, warn};
-use recipe_common::{link::{self, LinkMissingDomainError, LinkStatus}, recipe::{self, Recipe}};
+use recipe_common::{link::{self, LinkMissingDomainError, LinkStatus}, rawcipe::{self, Rawcipe}};
 use redis::aio::MultiplexedConnection;
 use reqwest::{Certificate, Client, ClientBuilder, Proxy};
 use serde_json::Value;
@@ -59,7 +59,7 @@ pub async fn process_parse(
     redis_recipes: MultiplexedConnection, 
     schema: Value,
     link: String
-) -> Result<Option<Recipe>, Error> {
+) -> Result<Option<Rawcipe>, Error> {
 
     let parsed = parser::parse(link.to_string(), schema).await;
 
@@ -71,7 +71,7 @@ pub async fn process_parse(
 
 
     link::update_status(redis_links.clone(), &link, LinkStatus::Processed).await?;
-    recipe::add(redis_recipes, parsed.clone()).await?;
+    rawcipe::add(redis_recipes, parsed.clone()).await?;
 
     trace!("Parsed recipe from {}", link);
 
@@ -82,7 +82,7 @@ pub async fn process_parse(
 pub async fn process_follow(
     redis_links: MultiplexedConnection, 
     contents: String,
-    recipe: Option<Recipe>,
+    recipe: Option<Rawcipe>,
     link: String
 ) -> Result<(), Error> {
     let recipe_exists = recipe.as_ref().is_some_and(|recipe| !recipe.ingredients.is_empty());

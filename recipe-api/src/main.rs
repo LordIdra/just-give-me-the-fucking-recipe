@@ -1,6 +1,7 @@
 use clap::Parser;
 use endpoints::get_links::get_links;
 use endpoints::get_rawcipe::get_rawcipe;
+use endpoints::refine::refine;
 use endpoints::{parse_ingredients::parse_ingredients, submit_link::submit_link};
 use log::info;
 use redis::aio::MultiplexedConnection;
@@ -12,6 +13,7 @@ use utoipa_redoc::{Redoc, Servable};
 use crate::endpoints::get_links::__path_get_links;
 use crate::endpoints::get_rawcipe::__path_get_rawcipe;
 use crate::endpoints::parse_ingredients::__path_parse_ingredients;
+use crate::endpoints::refine::__path_refine;
 use crate::endpoints::submit_link::__path_submit_link;
 
 pub mod endpoints;
@@ -69,6 +71,7 @@ async fn main() {
         .routes(routes!(get_links))
         .routes(routes!(get_rawcipe))
         .routes(routes!(parse_ingredients))
+        .routes(routes!(refine))
         .routes(routes!(submit_link))
         .with_state(state);
 

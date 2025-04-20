@@ -33,7 +33,7 @@ pub struct Rawcipe {
     pub sugar: Option<f32>,
 }
 
-fn get_redis_value<T: FromRedisValue>(iter: &mut Iter<Value>, field: &str) -> Result<T, RedisError> {
+pub fn get_redis_value<T: FromRedisValue>(iter: &mut Iter<Value>, field: &str) -> Result<T, RedisError> {
     match iter.next().map(T::from_redis_value) {
         Some(Ok(v)) => Ok(v),
         _ => Err(RedisError::from((ErrorKind::TypeError, "Failed to get field", field.to_owned()))),
