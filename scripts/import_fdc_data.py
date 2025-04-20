@@ -37,9 +37,9 @@ with open("fndds_ingredient_nutrient_value.csv", "r") as file:
 id = 0
 for ingredient, nutrient_map in ingredients.items():
     print(id, ingredient)
-    #for nutrient, value in nutrient_map.items():
+    for nutrient, value in nutrient_map.items():
         #r.hset(f"ingredient:{id}:nutrients", nutrient, value)
-        #print(f"ingredient:{id}:nutrients " + nutrient + " " + value)
+        print(f"ingredient:{id}:nutrients " + nutrient + " " + value)
     #r.set(f"ingredient:{id}:type", nutrient_map["type"])
     print(f"ingredient:{id}:type", nutrient_map["type"])
     id += 1

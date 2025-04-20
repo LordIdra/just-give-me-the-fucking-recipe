@@ -1,6 +1,6 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use ingredient::Ingredient;
-use recipe_common::recipe;
+use recipe_common::rawcipe;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -43,7 +43,7 @@ struct ParseIngredientErrorResponse {
 #[utoipa::path(
     post,
     path = "/parse_ingredients",
-    description = "Parse a recipe's ingredient list.",
+    description = "Parse a rawcipe's ingredient list.",
     responses(
         (status = OK, body = ParseIngredientsSuccessResponse),
         (status = BAD_REQUEST, body = ParseIngredientErrorResponse)
@@ -54,14 +54,14 @@ pub async fn parse_ingredients(
     State(state): State<AppState>, 
     Json(request): Json<ParseIngredientsRequest>
 ) -> impl IntoResponse {
-    match recipe::get_recipe(state.redis_recipes, request.id).await {
+    match rawcipe::get_rawcipe(state.redis_rawcipes, request.id).await {
         Err(err) => (
             StatusCode::BAD_REQUEST, 
             Json(ParseIngredientErrorResponse { err: err.to_string() }),
         ).into_response(),
 
-        Ok(recipe) => {
-            let parsed_ingredients: Result<Vec<Ingredient>, _> = recipe.ingredients.iter()
+        Ok(rawcipe) => {
+            let parsed_ingredients: Result<Vec<Ingredient>, _> = rawcipe.ingredients.iter()
                 .map(|v| Ingredient::try_from(v.as_str()))
                 .collect();
 
@@ -74,7 +74,7 @@ pub async fn parse_ingredients(
                 Ok(parsed_ingredients) => {
 
                     let mut formatted_ingredients = vec![];
-                    for (parsed_ingredient, original_ingredient) in parsed_ingredients.iter().zip(recipe.ingredients) {
+                    for (parsed_ingredient, original_ingredient) in parsed_ingredients.iter().zip(rawcipe.ingredients) {
 
                         let mut formatted_amounts = vec![];
                         for amount in &parsed_ingredient.amounts {

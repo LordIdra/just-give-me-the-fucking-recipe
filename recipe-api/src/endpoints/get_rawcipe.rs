@@ -1,45 +1,45 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use recipe_common::recipe::{self, Recipe};
+use recipe_common::rawcipe::{self, Rawcipe};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::AppState;
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct GetRecipeRequest {
+pub struct GetRawcipeRequest {
     #[schema(example = 54)]
     id: u64,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct GetRecipeErrorResponse {
+struct GetRawcipeErrorResponse {
     #[schema(example = "some error")]
     err: String,
 }
 
 #[utoipa::path(
     post,
-    path = "/get_recipe",
-    description = "Get a recipe by id.",
+    path = "/get_rawcipe",
+    description = "Get a rawcipe by id.",
     responses(
-        (status = OK, body = Recipe),
-        (status = BAD_REQUEST, body = GetRecipeErrorResponse)
+        (status = OK, body = Rawcipe),
+        (status = BAD_REQUEST, body = GetRawcipeErrorResponse)
     ),
 )]
 #[tracing::instrument(skip(state))]
-pub async fn get_recipe(
+pub async fn get_rawcipe(
     State(state): State<AppState>, 
-    Json(request): Json<GetRecipeRequest>
+    Json(request): Json<GetRawcipeRequest>
 ) -> impl IntoResponse {
-    match recipe::get_recipe(state.redis_recipes, request.id).await {
+    match rawcipe::get_rawcipe(state.redis_rawcipes, request.id).await {
         Err(err) => (
             StatusCode::BAD_REQUEST, 
-            Json(GetRecipeErrorResponse { err: err.to_string() }),
+            Json(GetRawcipeErrorResponse { err: err.to_string() }),
         ).into_response(),
 
-        Ok(recipe) => (
+        Ok(rawcipe) => (
             StatusCode::OK,
-            Json(recipe),
+            Json(rawcipe),
         ).into_response()
     }
 }

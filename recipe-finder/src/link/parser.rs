@@ -3,7 +3,7 @@ use regex::Regex;
 use serde_json::Value;
 use url::Url;
 
-use recipe_common::recipe::Recipe;
+use recipe_common::rawcipe::Rawcipe;
 
 fn duration_to_seconds(duration: iso8601::Duration) -> Option<u64> {
     match duration {
@@ -386,7 +386,7 @@ fn sugar(v: &Value) -> Option<f32> {
 }
 
 #[tracing::instrument(skip(schema))]
-pub async fn parse(link: String, schema: Value) -> Option<Recipe> {
+pub async fn parse(link: String, schema: Value) -> Option<Rawcipe> {
     let title = title(&schema)?;
     let description = description(&schema)?;
 
@@ -400,7 +400,7 @@ pub async fn parse(link: String, schema: Value) -> Option<Recipe> {
         return None;
     }
 
-    Some(Recipe {
+    Some(Rawcipe {
         link: link.clone(),
         title,
         ingredients,
