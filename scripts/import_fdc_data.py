@@ -18,7 +18,7 @@ with open("nutrient.csv", "r") as file:
         nutrients[id] = name
         #r.hset("nutrient:unit", name, unit)
 x = ""
-for (k, v) in nutrients:
+for k, v in nutrients.items():
     x += v + ", "
 print(x)
 
