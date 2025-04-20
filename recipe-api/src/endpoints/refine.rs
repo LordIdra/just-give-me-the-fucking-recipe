@@ -31,14 +31,17 @@ pub async fn refine(
     State(state): State<AppState>, 
     Json(request): Json<RefineRecipeRequest>
 ) -> impl IntoResponse {
+    println!("1");
     let rawcipe = rawcipe::get_rawcipe(state.redis_rawcipes, request.id).await;
     if let Err(err) = rawcipe {
         return (StatusCode::BAD_REQUEST, Json(RefineRecipeErrorResponse { err: err.to_string() })).into_response()
     }
     let rawcipe = rawcipe.unwrap();
 
+    println!("2");
     let recipe = Recipe::from_rawcipe(rawcipe);
 
+    println!("3");
     (StatusCode::OK, Json(recipe)).into_response()
 }
 
