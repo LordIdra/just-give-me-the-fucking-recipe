@@ -256,7 +256,6 @@ fn key_recipe_terms(id: u64) -> String {
 /// Returns true if added
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(redis_recipes))]
-#[must_use]
 pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Result<bool, Error> {
     let id: u64 = redis_recipes.incr(key_id(), 1).await?;
 
@@ -324,6 +323,41 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
     Ok(true)
 }
 
+#[tracing::instrument(skip(redis_rawcipes))]
+pub async fn get_recipe(mut redis_rawcipes: MultiplexedConnection, id: u64) -> Result<Rawcipe, Error> {
+    let mut pipe = redis::pipe();
+
+    pipe.get(key_recipe_link(id));
+    pipe.get(key_recipe_title(id));
+    pipe.get(key_recipe_description(id));
+    pipe.lrange(key_recipe_ingredients(id), 0, -1);
+    pipe.lrange(key_recipe_instructions(id), 0, -1);
+    pipe.get(key_recipe_date(id));
+    pipe.lrange(key_recipe_keywords(id), 0, -1);
+    pipe.lrange(key_recipe_authors(id), 0, -1);
+    pipe.lrange(key_recipe_images(id), 0, -1);
+    pipe.get(key_recipe_rating(id));
+    pipe.get(key_recipe_rating_count(id));
+    pipe.get(key_recipe_prep_time_seconds(id));
+    pipe.get(key_recipe_cook_time_seconds(id));
+    pipe.get(key_recipe_total_time_seconds(id));
+    pipe.get(key_recipe_servings(id));
+    pipe.get(key_recipe_calories(id));
+    pipe.get(key_recipe_carbohydrates(id));
+    pipe.get(key_recipe_cholesterol(id));
+    pipe.get(key_recipe_fat(id));
+    pipe.get(key_recipe_fiber(id));
+    pipe.get(key_recipe_protein(id));
+    pipe.get(key_recipe_saturated_fat(id));
+    pipe.get(key_recipe_sodium(id));
+    pipe.get(key_recipe_sugar(id));
+
+    let rawcipe = pipe.query_async(&mut redis_rawcipes)
+        .await?;
+
+    Ok(rawcipe)
+}
+
 pub fn extract_tags(rawcipe: &Rawcipe) -> Vec<String> {
     let lowercase_keywords: Vec<String> = rawcipe.keywords
         .clone()
@@ -354,12 +388,6 @@ pub fn extract_terms(rawcipe: &Rawcipe) -> Vec<String> {
     for keyword in &rawcipe.keywords {
         terms.append(&mut split_by_space(keyword));
     }
-    for ingredient in &rawcipe.ingredients {
-        terms.append(&mut split_by_space(ingredient));
-    }
-    for instruction in &rawcipe.instructions {
-        terms.append(&mut split_by_space(instruction));
-    }
     terms
 }
 
@@ -367,7 +395,7 @@ fn split_by_space(string: &str) -> Vec<String> {
     string.split(' ').map(|v| v.to_string()).collect()
 }
 
-async fn get_recipes_by_term(mut redis_recipes: MultiplexedConnection, term: &str) -> HashSet<usize> {
+pub async fn get_recipes_by_term(mut redis_recipes: MultiplexedConnection, term: &str) -> HashSet<usize> {
     redis_recipes.smembers(key_term_recipes(term)).await.unwrap_or(HashSet::new())
 }
 

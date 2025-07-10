@@ -26,6 +26,8 @@ struct Args {
     redis_links_url: String,
     #[arg(long)]
     redis_rawcipes_url: String,
+    #[arg(long)]
+    redis_recipes_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +36,8 @@ pub struct AppState {
     redis_links: MultiplexedConnection,
     #[allow(unused)]
     redis_rawcipes: MultiplexedConnection,
+    #[allow(unused)]
+    redis_recipes: MultiplexedConnection,
 }
 
 #[tokio::main]
@@ -62,9 +66,16 @@ async fn main() {
         .await
         .unwrap();
 
+    let redis_recipes = redis::Client::open(args.redis_recipes_url)
+        .unwrap()
+        .get_multiplexed_tokio_connection()
+        .await
+        .unwrap();
+
     let state = AppState {
         redis_links,
         redis_rawcipes,
+        redis_recipes,
     };
 
     let api_router = OpenApiRouter::new()

@@ -64,7 +64,7 @@ pub async fn process_parse(
     let parsed = parser::parse(link.to_string(), schema).await;
 
     let Some(parsed) = parsed else {
-        trace!("Failed to parse recipe from {}", link);
+        trace!("Failed to parse recipe from {link}");
         link::update_status(redis_links.clone(), &link, LinkStatus::ParsingFailed).await?;
         return Ok(None);
     };
@@ -91,7 +91,7 @@ pub async fn process_follow(
     // Remaining follows
     let remaining_follows = link::get_remaining_follows(redis_links.clone(), &link).await?;
     if remaining_follows <= 0 && !recipe_is_complete {
-        trace!("Terminated follow for {}", link);
+        trace!("Terminated follow for {link}");
         return Ok(())
     }
 

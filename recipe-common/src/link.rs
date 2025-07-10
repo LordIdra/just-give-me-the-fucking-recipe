@@ -72,7 +72,7 @@ fn key_status_to_links(status: LinkStatus) -> String {
 }
 
 fn key_domain_to_waiting_links(domain: &str) -> String {
-    format!("link:waiting_links_by_domain:{}", domain)
+    format!("link:waiting_links_by_domain:{domain}")
 }
 
 fn key_processing_domains() -> String {
@@ -108,7 +108,6 @@ fn key_link_to_content_size() -> String {
 }
 
 #[tracing::instrument(skip(pool))]
-#[must_use]
 pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), Error> {
     let processing: Vec<String> = pool.zrange(key_status_to_links(LinkStatus::Processing), 0, -1).await?;
     for link in processing {
@@ -121,7 +120,6 @@ pub async fn reset_tasks(mut pool: MultiplexedConnection) -> Result<(), Error> {
 /// Returns true if added
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(pool))]
-#[must_use]
 pub async fn add(
     mut pool: MultiplexedConnection,
     link: &str,
@@ -160,62 +158,52 @@ pub async fn add(
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_status(mut redis_links: MultiplexedConnection, link: &str) -> Result<LinkStatus, Error> {
     Ok(LinkStatus::from_string(&redis_links.hget::<_, _, String>(key_link_to_status(), link).await?).unwrap())
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_priority(mut redis_links: MultiplexedConnection, link: &str) -> Result<f32, Error> {
     Ok(redis_links.hget(key_link_to_priority(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_parent(mut redis_links: MultiplexedConnection, link: &str) -> Result<Option<String>, Error> {
     Ok(redis_links.hget(key_link_to_parent(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_domain(mut redis_links: MultiplexedConnection, link: &str) -> Result<String, Error> {
     Ok(redis_links.hget(key_link_to_domain(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_remaining_follows(mut redis_links: MultiplexedConnection, link: &str) -> Result<i32, Error> {
     Ok(redis_links.hget(key_link_to_remaining_follows(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn set_content_size(mut redis_links: MultiplexedConnection, link: &str, content_size: usize) -> Result<(), Error> {
     Ok(redis_links.hset(key_link_to_content_size(), link, content_size).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn links_with_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<usize, Error> {
     Ok(redis_links.zcard(key_status_to_links(status)).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn total_content_size(mut redis_links: MultiplexedConnection) -> Result<u64, Error> {
     let sizes: Vec<String> = redis_links.hvals(key_link_to_content_size()).await?;
     Ok(sizes.iter().filter_map(|v| v.parse::<u64>().ok()).sum())
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn is_domain_waiting(mut redis_links: MultiplexedConnection, domain: &str) -> Result<bool, Error> {
     Ok(redis_links.exists(key_domain_to_waiting_links(domain)).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result<usize, Error> {
     let processing: usize = redis_links.scard(key_processing_domains()).await?;
     let waiting: usize = redis_links.scard(key_waiting_domains()).await?;
@@ -223,13 +211,11 @@ pub async fn domains_in_system(mut redis_links: MultiplexedConnection) -> Result
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn get_links_by_status(mut redis_links: MultiplexedConnection, status: LinkStatus) -> Result<Vec<String>, Error> {
     Ok(redis::cmd("zrange").arg(key_status_to_links(status)).arg("0").arg("-1").query_async(&mut redis_links).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, status: LinkStatus) -> Result<(), Error> {
     let previous_status = get_status(redis_links.clone(), link).await?;
     let priority = get_priority(redis_links.clone(), link).await?;
@@ -270,13 +256,11 @@ pub async fn update_status(mut redis_links: MultiplexedConnection, link: &str, s
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 async fn exists(mut redis_links: MultiplexedConnection, link: &str) -> Result<bool, Error> {
     Ok(redis_links.hexists(key_link_to_status(), link).await?)
 }
 
 #[tracing::instrument(skip(redis_links))]
-#[must_use]
 pub async fn poll_next_jobs(mut redis_links: MultiplexedConnection, count: usize) -> Result<Vec<String>, Error> {
     let next_domains: Vec<String> = redis::cmd("SPOP").arg(key_waiting_domains()).arg(count).query_async(&mut redis_links).await?;
 

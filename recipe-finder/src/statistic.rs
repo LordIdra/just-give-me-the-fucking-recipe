@@ -8,7 +8,6 @@ use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
 
 #[tracing::instrument(skip(redis_links, redis_recipes, mysql))]
-#[must_use]
 async fn update(
     redis_links: MultiplexedConnection, 
     redis_recipes: MultiplexedConnection, 

@@ -5,7 +5,7 @@ mod c_extractor {
     use std::{ffi::{c_char, CStr, CString}, str};
 
     #[link(name = "extractor")]
-    unsafe extern {
+    unsafe extern "C" {
         fn extract(input: *const c_char) -> *mut c_char;
     }
     

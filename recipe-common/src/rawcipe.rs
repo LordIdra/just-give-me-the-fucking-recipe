@@ -247,7 +247,6 @@ fn key_rawcipe_instructions(id: u64) -> String {
 /// Returns true if added
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(redis_rawcipes))]
-#[must_use]
 pub async fn add(mut redis_rawcipes: MultiplexedConnection, rawcipe: Rawcipe) -> Result<bool, Error> {
     if exists(redis_rawcipes.clone(), &rawcipe).await? {
         return Ok(false);
@@ -329,13 +328,11 @@ pub async fn add(mut redis_rawcipes: MultiplexedConnection, rawcipe: Rawcipe) ->
 }
 
 #[tracing::instrument(skip(redis_rawcipes))]
-#[must_use]
 pub async fn rawcipe_count(mut redis_rawcipes: MultiplexedConnection) -> Result<usize, Error> {
     Ok(redis_rawcipes.scard(key_rawcipes()).await?)
 }
 
 #[tracing::instrument(skip(redis_rawcipes))]
-#[must_use]
 async fn exists(mut redis_rawcipes: MultiplexedConnection, rawcipe: &Rawcipe) -> Result<bool, Error> {
     let rawcipes_with_titles: Vec<usize> = redis_rawcipes.smembers(key_title_rawcipes(&rawcipe.title)).await?;
     let rawcipes_with_description: Vec<usize> = redis_rawcipes.smembers(key_description_rawcipes(&rawcipe.description)).await?;
@@ -344,7 +341,6 @@ async fn exists(mut redis_rawcipes: MultiplexedConnection, rawcipe: &Rawcipe) ->
 }
 
 #[tracing::instrument(skip(redis_rawcipes))]
-#[must_use]
 pub async fn get_rawcipe(mut redis_rawcipes: MultiplexedConnection, id: u64) -> Result<Rawcipe, Error> {
     let mut pipe = redis::pipe();
 
