@@ -34,7 +34,7 @@ struct SearchSuccessResponse {
     ),
 )]
 #[tracing::instrument(skip(state))]
-pub async fn get_links(
+pub async fn search(
     State(state): State<AppState>,
     Json(request): Json<SearchRequest>,
 ) -> impl IntoResponse {
