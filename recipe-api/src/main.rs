@@ -1,8 +1,6 @@
 use clap::Parser;
 use endpoints::get_links::get_links;
-use endpoints::get_rawcipe::get_rawcipe;
 use endpoints::get_recipe::get_recipe;
-use endpoints::refine::refine;
 use endpoints::search::search;
 use endpoints::{parse_ingredients::parse_ingredients, submit_link::submit_link};
 use log::info;
@@ -13,10 +11,8 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_redoc::{Redoc, Servable};
 use crate::endpoints::get_links::__path_get_links;
-use crate::endpoints::get_rawcipe::__path_get_rawcipe;
 use crate::endpoints::get_recipe::__path_get_recipe;
 use crate::endpoints::parse_ingredients::__path_parse_ingredients;
-use crate::endpoints::refine::__path_refine;
 use crate::endpoints::search::__path_search;
 use crate::endpoints::submit_link::__path_submit_link;
 
@@ -29,8 +25,6 @@ struct Args {
     #[arg(long)]
     redis_links_url: String,
     #[arg(long)]
-    redis_rawcipes_url: String,
-    #[arg(long)]
     redis_recipes_url: String,
 }
 
@@ -38,8 +32,6 @@ struct Args {
 pub struct AppState {
     #[allow(unused)]
     redis_links: MultiplexedConnection,
-    #[allow(unused)]
-    redis_rawcipes: MultiplexedConnection,
     #[allow(unused)]
     redis_recipes: MultiplexedConnection,
 }
@@ -64,12 +56,6 @@ async fn main() {
         .await
         .unwrap();
 
-    let redis_rawcipes = redis::Client::open(args.redis_rawcipes_url)
-        .unwrap()
-        .get_multiplexed_tokio_connection()
-        .await
-        .unwrap();
-
     let redis_recipes = redis::Client::open(args.redis_recipes_url)
         .unwrap()
         .get_multiplexed_tokio_connection()
@@ -78,16 +64,13 @@ async fn main() {
 
     let state = AppState {
         redis_links,
-        redis_rawcipes,
         redis_recipes,
     };
 
     let api_router = OpenApiRouter::new()
         .routes(routes!(get_links))
-        .routes(routes!(get_rawcipe))
         .routes(routes!(get_recipe))
         .routes(routes!(parse_ingredients))
-        .routes(routes!(refine))
         .routes(routes!(search))
         .routes(routes!(submit_link))
         .with_state(state);

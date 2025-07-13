@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Error;
 use log::{info, warn};
-use recipe_common::{link::{links_with_status, total_content_size, LinkStatus}, rawcipe::rawcipe_count};
+use recipe_common::{link::{links_with_status, total_content_size, LinkStatus}, recipe::recipe_count};
 use redis::aio::MultiplexedConnection;
 use sqlx::{query, MySql, Pool};
 use tokio::time::interval;
@@ -33,7 +33,7 @@ timestamp, waiting_for_processing, processing, download_failed, extraction_faile
 timestamp, recipe_count
 ) VALUES (?, ?)")
         .bind(timestamp)
-        .bind(rawcipe_count(redis_recipes.clone()).await? as i64)
+        .bind(recipe_count(redis_recipes.clone()).await? as i64)
         .execute(&mysql)
         .await?;
 

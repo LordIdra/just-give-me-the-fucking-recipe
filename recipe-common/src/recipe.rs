@@ -1,11 +1,9 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, slice::Iter};
 
 use anyhow::Error;
-use redis::{aio::MultiplexedConnection, AsyncCommands as _, ErrorKind, FromRedisValue, RedisError, RedisResult, Value};
+use redis::{aio::MultiplexedConnection, AsyncCommands, ErrorKind, FromRedisValue, RedisError, RedisResult, Value};
 use serde::Serialize;
 use utoipa::ToSchema;
-
-use crate::rawcipe::{get_redis_value, Rawcipe};
 
 #[derive(Serialize, Debug, Clone, ToSchema)]
 pub struct Recipe {
@@ -14,27 +12,32 @@ pub struct Recipe {
     pub description: String,
     pub ingredients: Vec<String>,
     pub instructions: Vec<String>,
-    pub date: String,
+    pub date: Option<String>,
     pub keywords: Vec<String>,
     pub authors: Vec<String>,
     pub images: Vec<String>,
-    pub rating: f32,
-    pub rating_count: i32,
-    pub prep_time_seconds: u64,
-    pub cook_time_seconds: u64,
-    pub total_time_seconds: u64,
-    pub servings: String,
-    pub calories: f32,
-    pub carbohydrates: f32,
-    pub cholesterol: f32,
-    pub fat: f32,
-    pub fiber: f32,
-    pub protein: f32,
-    pub saturated_fat: f32,
-    pub sodium: f32,
-    pub sugar: f32,
-    pub tags: Vec<String>,
-    pub terms: Vec<String>,
+    pub rating: Option<f32>,
+    pub rating_count: Option<i32>,
+    pub prep_time_seconds: Option<u64>,
+    pub cook_time_seconds: Option<u64>,
+    pub total_time_seconds: Option<u64>,
+    pub servings: Option<String>,
+    pub calories: Option<f32>,
+    pub carbohydrates: Option<f32>,
+    pub cholesterol: Option<f32>,
+    pub fat: Option<f32>,
+    pub fiber: Option<f32>,
+    pub protein: Option<f32>,
+    pub saturated_fat: Option<f32>,
+    pub sodium: Option<f32>,
+    pub sugar: Option<f32>,
+}
+
+pub fn get_redis_value<T: FromRedisValue>(iter: &mut Iter<Value>, field: &str) -> Result<T, RedisError> {
+    match iter.next().map(T::from_redis_value) {
+        Some(Ok(v)) => Ok(v),
+        _ => Err(RedisError::from((ErrorKind::TypeError, "Failed to get field", field.to_owned()))),
+    }
 }
 
 impl FromRedisValue for Recipe {
@@ -69,42 +72,30 @@ impl FromRedisValue for Recipe {
             saturated_fat: get_redis_value(&mut iter, "saturated_fat")?,
             sodium: get_redis_value(&mut iter, "sodium")?,
             sugar: get_redis_value(&mut iter, "sugar")?,
-            tags: get_redis_value(&mut iter, "tags")?,
-            terms: get_redis_value(&mut iter, "terms")?,
         })
     }
 }
 
 impl Recipe {
-    pub fn from_rawcipe(rawcipe: Rawcipe) -> Self {
-        Self {
-            link: rawcipe.link.clone(),
-            title: rawcipe.title.clone(),
-            description: rawcipe.description.clone(),
-            ingredients: rawcipe.ingredients.clone(),
-            instructions: rawcipe.instructions.clone(),
-            date: rawcipe.date.clone().unwrap(),
-            keywords: rawcipe.keywords.clone(),
-            authors: rawcipe.authors.clone(),
-            images: rawcipe.images.clone(),
-            rating: rawcipe.rating.unwrap(),
-            rating_count: rawcipe.rating_count.unwrap(),
-            prep_time_seconds: rawcipe.prep_time_seconds.unwrap(),
-            cook_time_seconds: rawcipe.cook_time_seconds.unwrap(),
-            total_time_seconds: rawcipe.total_time_seconds.unwrap(),
-            servings: rawcipe.servings.clone().unwrap(),
-            calories: rawcipe.calories.unwrap(),
-            carbohydrates: rawcipe.carbohydrates.unwrap(),
-            cholesterol: rawcipe.cholesterol.unwrap(),
-            fat: rawcipe.fat.unwrap(),
-            fiber: rawcipe.fiber.unwrap(),
-            protein: rawcipe.protein.unwrap(),
-            saturated_fat: rawcipe.saturated_fat.unwrap(),
-            sodium: rawcipe.sodium.unwrap(),
-            sugar: rawcipe.sugar.unwrap(),
-            tags: extract_tags(&rawcipe),
-            terms: extract_terms(&rawcipe),
-        }
+    pub fn is_complete(&self) -> bool {
+        !self.images.is_empty()
+            && !self.authors.is_empty()
+            && self.date.is_some()
+            && self.servings.is_some()
+            && self.total_time_seconds.is_some()
+            && !self.ingredients.is_empty()
+            && self.rating.is_some()
+            && self.rating_count.is_some()
+            && !self.keywords.is_empty()
+            && self.calories.is_some()
+            && self.carbohydrates.is_some()
+            && self.cholesterol.is_some()
+            && self.fat.is_some()
+            && self.fiber.is_some()
+            && self.protein.is_some()
+            && self.saturated_fat.is_some()
+            && self.sodium.is_some()
+            && self.sugar.is_some()
     }
 }
 
@@ -121,6 +112,16 @@ fn key_recipes() -> String {
 // SET of all recipes associated with a term
 fn key_term_recipes(term: &str) -> String {
     format!("term:{term}:recipes")
+}
+
+// SET of all recipes associated with a title
+fn key_title_recipes(title: &str) -> String {
+    format!("title:{title}:titles")
+}
+
+// SET of all recipes associated with a description
+fn key_description_recipes(description: &str) -> String {
+    format!("description:{description}:recipes")
 }
 
 // STRING
@@ -141,21 +142,6 @@ fn key_recipe_description(id: u64) -> String {
 // STRING
 fn key_recipe_date(id: u64) -> String {
     format!("recipe:{id}:date")
-}
-
-// LIST
-fn key_recipe_keywords(id: u64) -> String {
-    format!("recipe:{id}:keywords")
-}
-
-// LIST
-fn key_recipe_authors(id: u64) -> String {
-    format!("recipe:{id}:authors")
-}
-
-// LIST
-fn key_recipe_images(id: u64) -> String {
-    format!("recipe:{id}:images")
 }
 
 // STRING
@@ -234,6 +220,21 @@ fn key_recipe_sugar(id: u64) -> String {
 }
 
 // LIST
+fn key_recipe_keywords(id: u64) -> String {
+    format!("recipe:{id}:keywords")
+}
+
+// LIST
+fn key_recipe_authors(id: u64) -> String {
+    format!("recipe:{id}:authors")
+}
+
+// LIST
+fn key_recipe_images(id: u64) -> String {
+    format!("recipe:{id}:images")
+}
+
+// LIST
 fn key_recipe_ingredients(id: u64) -> String {
     format!("recipe:{id}:ingredients")
 }
@@ -243,79 +244,82 @@ fn key_recipe_instructions(id: u64) -> String {
     format!("recipe:{id}:instructions")
 }
 
-// LIST
-fn key_recipe_tags(id: u64) -> String {
-    format!("recipe:{id}:tags")
-}
-
-// LIST
-fn key_recipe_terms(id: u64) -> String {
-    format!("recipe:{id}:terms")
-}
-
 /// Returns true if added
 /// Returns false if already existed or matches the blacklist
 #[tracing::instrument(skip(redis_recipes))]
 pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Result<bool, Error> {
+    if exists(redis_recipes.clone(), &recipe).await? {
+        return Ok(false);
+    }
+
     let id: u64 = redis_recipes.incr(key_id(), 1).await?;
 
     let mut pipe = redis::pipe();
 
     pipe.sadd(key_recipes(), id);
+
     pipe.set(key_recipe_link(id), &recipe.link);
+
+    pipe.sadd(key_title_recipes(&recipe.title), id);
     pipe.set(key_recipe_title(id), &recipe.title);
+
+    pipe.sadd(key_description_recipes(&recipe.description), id);
     pipe.set(key_recipe_description(id), &recipe.description);
 
-    pipe.cmd("lpush").arg(key_recipe_ingredients(id));
-    for ingredient in recipe.ingredients.iter().rev() {
-        pipe.arg(ingredient);
+    recipe.date.as_ref().map(|v| pipe.set(key_recipe_date(id), v.to_string()));
+    recipe.rating.as_ref().map(|v| pipe.set(key_recipe_rating(id), v));
+    recipe.rating_count.as_ref().map(|v| pipe.set(key_recipe_rating_count(id), v));
+    recipe.prep_time_seconds.as_ref().map(|v| pipe.set(key_recipe_prep_time_seconds(id), v));
+    recipe.cook_time_seconds.as_ref().map(|v| pipe.set(key_recipe_cook_time_seconds(id), v));
+    recipe.total_time_seconds.as_ref().map(|v| pipe.set(key_recipe_total_time_seconds(id), v));
+    recipe.servings.as_ref().map(|v| pipe.set(key_recipe_servings(id), v));
+    recipe.calories.as_ref().map(|v| pipe.set(key_recipe_calories(id), v));
+    recipe.carbohydrates.as_ref().map(|v| pipe.set(key_recipe_carbohydrates(id), v));
+    recipe.cholesterol.as_ref().map(|v| pipe.set(key_recipe_cholesterol(id), v));
+    recipe.fat.as_ref().map(|v| pipe.set(key_recipe_fat(id), v));
+    recipe.fiber.as_ref().map(|v| pipe.set(key_recipe_fiber(id), v));
+    recipe.protein.as_ref().map(|v| pipe.set(key_recipe_protein(id), v));
+    recipe.saturated_fat.as_ref().map(|v| pipe.set(key_recipe_saturated_fat(id), v));
+    recipe.sodium.as_ref().map(|v| pipe.set(key_recipe_sodium(id), v));
+    recipe.sugar.as_ref().map(|v| pipe.set(key_recipe_sugar(id), v));
+
+    if !recipe.keywords.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_keywords(id));
+        for keyword in recipe.keywords.iter().rev() {
+            pipe.arg(keyword);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_instructions(id));
-    for instruction in recipe.instructions.iter().rev() {
-        pipe.arg(instruction);
+    if !recipe.authors.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_authors(id));
+        for author in recipe.authors.iter().rev() {
+            pipe.arg(author);
+        }
     }
 
-    pipe.set(key_recipe_date(id), recipe.date.clone());
-
-    pipe.cmd("lpush").arg(key_recipe_keywords(id));
-    for keyword in recipe.keywords.iter().rev() {
-        pipe.arg(keyword);
+    if !recipe.images.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_images(id));
+        for image in recipe.images.iter().rev() {
+            pipe.arg(image);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_authors(id));
-    for author in recipe.authors.iter().rev() {
-        pipe.arg(author);
+    if !recipe.ingredients.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_ingredients(id));
+        for ingredient in recipe.ingredients.iter().rev() {
+            pipe.arg(ingredient);
+        }
     }
 
-    pipe.cmd("lpush").arg(key_recipe_images(id));
-    for image in recipe.images.iter().rev() {
-        pipe.arg(image);
+    if !recipe.instructions.is_empty() {
+        pipe.cmd("lpush").arg(key_recipe_instructions(id));
+        for instruction in recipe.instructions.iter().rev() {
+            pipe.arg(instruction);
+        }
     }
-
-    pipe.set(key_recipe_rating(id), recipe.rating);
-    pipe.set(key_recipe_rating_count(id), recipe.rating_count);
-    pipe.set(key_recipe_prep_time_seconds(id), recipe.prep_time_seconds);
-    pipe.set(key_recipe_cook_time_seconds(id), recipe.cook_time_seconds);
-    pipe.set(key_recipe_total_time_seconds(id), recipe.total_time_seconds);
-    pipe.set(key_recipe_servings(id), recipe.servings.clone());
-    pipe.set(key_recipe_calories(id), recipe.calories);
-    pipe.set(key_recipe_carbohydrates(id), recipe.carbohydrates);
-    pipe.set(key_recipe_cholesterol(id), recipe.cholesterol);
-    pipe.set(key_recipe_fat(id), recipe.fat);
-    pipe.set(key_recipe_fiber(id), recipe.fiber);
-    pipe.set(key_recipe_protein(id), recipe.protein);
-    pipe.set(key_recipe_saturated_fat(id), recipe.saturated_fat);
-    pipe.set(key_recipe_sodium(id), recipe.sodium);
-    pipe.set(key_recipe_sugar(id), recipe.sugar);
-
-    for tag in recipe.tags {
-        pipe.sadd(key_recipe_tags(id), tag);
-    }
-
-    for term in recipe.terms {
+    
+    for term in extract_terms(&recipe) {
         pipe.sadd(key_term_recipes(&term), id);
-        pipe.sadd(key_recipe_terms(id), term);
     }
 
     pipe.exec_async(&mut redis_recipes).await?;
@@ -323,8 +327,21 @@ pub async fn add(mut redis_recipes: MultiplexedConnection, recipe: Recipe) -> Re
     Ok(true)
 }
 
-#[tracing::instrument(skip(redis_rawcipes))]
-pub async fn get_recipe(mut redis_rawcipes: MultiplexedConnection, id: u64) -> Result<Rawcipe, Error> {
+#[tracing::instrument(skip(redis_recipes))]
+pub async fn recipe_count(mut redis_recipes: MultiplexedConnection) -> Result<usize, Error> {
+    Ok(redis_recipes.scard(key_recipes()).await?)
+}
+
+#[tracing::instrument(skip(redis_recipes))]
+async fn exists(mut redis_recipes: MultiplexedConnection, recipe: &Recipe) -> Result<bool, Error> {
+    let recipes_with_titles: Vec<usize> = redis_recipes.smembers(key_title_recipes(&recipe.title)).await?;
+    let recipes_with_description: Vec<usize> = redis_recipes.smembers(key_description_recipes(&recipe.description)).await?;
+
+    Ok(recipes_with_titles.iter().any(|x| recipes_with_description.contains(x)))
+}
+
+#[tracing::instrument(skip(redis_recipes))]
+pub async fn get_recipe(mut redis_recipes: MultiplexedConnection, id: u64) -> Result<Recipe, Error> {
     let mut pipe = redis::pipe();
 
     pipe.get(key_recipe_link(id));
@@ -352,47 +369,30 @@ pub async fn get_recipe(mut redis_rawcipes: MultiplexedConnection, id: u64) -> R
     pipe.get(key_recipe_sodium(id));
     pipe.get(key_recipe_sugar(id));
 
-    let rawcipe = pipe.query_async(&mut redis_rawcipes)
+    let recipe = pipe.query_async(&mut redis_recipes)
         .await?;
 
-    Ok(rawcipe)
-}
-
-pub fn extract_tags(rawcipe: &Rawcipe) -> Vec<String> {
-    let lowercase_keywords: Vec<String> = rawcipe.keywords
-        .clone()
-        .iter()
-        .map(|keyword| keyword.to_lowercase())
-        .collect();
-    let mut tags = vec![];
-
-    if lowercase_keywords.contains(&"vegetarian".to_string()) {
-        tags.push("vegetarian".to_string());
-    }
-
-    if lowercase_keywords.contains(&"vegan".to_string()) {
-        tags.push("vegan".to_string());
-    }
-
-    if lowercase_keywords.contains(&"gluten free".to_string()) {
-        tags.push("gluten free".to_string());
-    }
-
-    tags
-}
-
-pub fn extract_terms(rawcipe: &Rawcipe) -> Vec<String> {
-    let mut terms = vec![];
-    terms.append(&mut split_by_space(&rawcipe.title));
-    terms.append(&mut split_by_space(&rawcipe.description));
-    for keyword in &rawcipe.keywords {
-        terms.append(&mut split_by_space(keyword));
-    }
-    terms
+    Ok(recipe)
 }
 
 fn split_by_space(string: &str) -> Vec<String> {
     string.split(' ').map(|v| v.to_string()).collect()
+}
+
+pub fn extract_terms(recipe: &Recipe) -> Vec<String> {
+    let mut terms = vec![];
+    terms.append(&mut split_by_space(&recipe.title));
+    terms.append(&mut split_by_space(&recipe.description));
+    for keyword in &recipe.keywords {
+        terms.append(&mut split_by_space(keyword));
+    }
+    for ingredient in &recipe.ingredients {
+        terms.append(&mut split_by_space(ingredient));
+    }
+    for instruction in &recipe.instructions {
+        terms.append(&mut split_by_space(instruction));
+    }
+    terms
 }
 
 pub async fn get_recipes_by_term(mut redis_recipes: MultiplexedConnection, term: &str) -> HashSet<usize> {
